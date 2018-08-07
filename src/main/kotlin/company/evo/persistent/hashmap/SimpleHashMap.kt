@@ -16,29 +16,67 @@ interface SimpleHashMapRO<K, V> {
 }
 
 interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
-    fun put(key: K, value: V)
+    fun put(key: K, value: V): Boolean
+    fun remove(key: K): Boolean
+}
+
+open class SimpleHashMapROImpl<K, V>(
+        private val buffer: ByteBuffer
+) : SimpleHashMapRO<K, V> {
+    override fun get(key: K): V {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+}
+
+class SimpleHashMapImpl<K, V>(
+        private val buffer: ByteBuffer
+) : SimpleHashMap<K, V>, SimpleHashMapROImpl<K, V>(buffer) {
+    override fun put(key: K, value: V): Boolean {
+        TODO("not implemented")
+    }
+
+    override fun remove(key: K): Boolean {
+        TODO("not implemented")
+    }
 }
 
 abstract class SimpleHashMapBaseEnv(
+        protected val path: Path,
         private val versionBuffer: ByteBuffer
 ) : AutoCloseable
 {
+    companion object {
+        const val MAX_RETRIES = 100
+    }
+
     fun getVersion() = versionBuffer.getLong(0)
 
+    protected fun getMapFilename(version: Long) = "hashmap_$version.data"
+
+    protected fun getMapPath(version: Long) = path.resolve(getMapFilename(version))
 }
 
-class SimpleHashMapROEnv<K, V>(versionBuffer: ByteBuffer) : SimpleHashMapBaseEnv(versionBuffer) {
-    fun aquire(): SimpleHashMapRO<K, V> {
-        TODO("not implemented")
+class SimpleHashMapROEnv<K, V>(
+        path: Path,
+        versionBuffer: ByteBuffer
+) : SimpleHashMapBaseEnv(path, versionBuffer) {
+    fun getMap(): SimpleHashMapRO<K, V> {
+        val mapPath = getMapPath(getVersion())
+        val mapBuffer = RandomAccessFile(mapPath.toString(), "r").use { file ->
+            val channel = file.channel
+            channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+        }
+        return SimpleHashMapROImpl(mapBuffer)
     }
 
     override fun close() {}
 }
 
 class SimpleHashMapEnv<K, V>(
-        private val versionBuffer: ByteBuffer,
+        path: Path,
+        versionBuffer: ByteBuffer,
         private val versionFileLock: FileLock
-) : SimpleHashMapBaseEnv(versionBuffer) {
+) : SimpleHashMapBaseEnv(path, versionBuffer) {
     class Builder<K, V> {
         companion object {
             const val VERSION_FILENAME = "hashmap.ver"
@@ -64,20 +102,20 @@ class SimpleHashMapEnv<K, V>(
             val verLock = aquireLock(verPath)
             val verBuffer = getVersionBuffer(verPath, Mode.CREATE)
             verBuffer.putLong(0, 0L)
-            return SimpleHashMapEnv(verBuffer, verLock)
+            return SimpleHashMapEnv(path, verBuffer, verLock)
         }
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
             val verPath = path.resolve(VERSION_FILENAME)
             val verBuffer = getVersionBuffer(verPath, Mode.OPEN_RO)
-            return SimpleHashMapROEnv(verBuffer)
+            return SimpleHashMapROEnv(path, verBuffer)
         }
 
         fun openWritable(path: Path): SimpleHashMapEnv<K, V> {
             val verPath = path.resolve(VERSION_FILENAME)
             val verLock = aquireLock(verPath)
             val verBuffer = getVersionBuffer(verPath, Mode.OPEN_RW)
-            return SimpleHashMapEnv(verBuffer, verLock)
+            return SimpleHashMapEnv(path, verBuffer, verLock)
         }
 
         private fun aquireLock(path: Path): FileLock {
@@ -109,8 +147,13 @@ class SimpleHashMapEnv<K, V>(
         }
     }
 
-    fun aquire(): SimpleHashMap<K, V> {
-        TODO("not implemented")
+    fun getMap(): SimpleHashMap<K, V> {
+        val mapPath = getMapPath(getVersion())
+        val mapBuffer = RandomAccessFile(mapPath.toString(), "rw").use { file ->
+            val channel = file.channel
+            channel.map(FileChannel.MapMode.READ_WRITE, 0, channel.size())
+        }
+        return SimpleHashMapImpl(mapBuffer)
     }
 
     override fun close() {
