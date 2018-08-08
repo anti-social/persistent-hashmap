@@ -24,26 +24,30 @@ class SimpleHashMapTests : FunSpec() {
         test("locking: single writer, multiple readers")
                 .config(extensions = listOf(TempDirInterceptor()))
         {
-            SimpleHashMapEnv.Builder<Int, Float>().create(tmpDirPath).use {
-                shouldThrow<WriteLockException> {
-                    SimpleHashMapEnv.Builder<Int, Float>().create(tmpDirPath)
-                }
-
-                shouldThrow<WriteLockException> {
-                    SimpleHashMapEnv.Builder<Int, Float>().openWritable(tmpDirPath)
-                }
+            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
+                env.getCurrentVersion() shouldBe 0L
 
                 val roMap = SimpleHashMapEnv.Builder<Int, Float>().openReadOnly(tmpDirPath)
-                roMap.getVersion() shouldBe 0L
+                roMap.getCurrentVersion() shouldBe 0L
+
+                shouldThrow<WriteLockException> {
+                    SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath)
+                }
+
             }
 
-            SimpleHashMapEnv.Builder<Int, Float>().openWritable(tmpDirPath).use {}
+            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
+                env.getCurrentVersion() shouldBe 0L
+            }
         }
 
-        test("open missing")
+        test("getting map")
                 .config(extensions = listOf(TempDirInterceptor()))
         {
-            SimpleHashMapEnv.Builder<Int, Float>().openWritable(tmpDirPath).use {}
+            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
+                env.getCurrentVersion() shouldBe 0L
+                val map = env.getMap()
+            }
         }
     }
 

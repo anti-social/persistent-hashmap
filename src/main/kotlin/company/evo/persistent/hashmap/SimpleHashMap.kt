@@ -12,6 +12,7 @@ class WriteLockException(msg: String, cause: Exception? = null) : PersistentHash
 class CorruptedVersionFileException(msg: String) : PersistentHashMapException(msg)
 
 interface SimpleHashMapRO<K, V> {
+    val version: Long
     fun get(key: K): V
 }
 
@@ -21,16 +22,18 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
 }
 
 open class SimpleHashMapROImpl<K, V>(
+        override val version: Long,
         private val buffer: ByteBuffer
 ) : SimpleHashMapRO<K, V> {
     override fun get(key: K): V {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        TODO("not implemented")
     }
 }
 
 class SimpleHashMapImpl<K, V>(
+        version: Long,
         private val buffer: ByteBuffer
-) : SimpleHashMap<K, V>, SimpleHashMapROImpl<K, V>(buffer) {
+) : SimpleHashMap<K, V>, SimpleHashMapROImpl<K, V>(version, buffer) {
     override fun put(key: K, value: V): Boolean {
         TODO("not implemented")
     }
@@ -49,11 +52,11 @@ abstract class SimpleHashMapBaseEnv(
         const val MAX_RETRIES = 100
     }
 
-    fun getVersion() = versionBuffer.getLong(0)
+    fun getCurrentVersion() = versionBuffer.getLong(0)
 
-    protected fun getMapFilename(version: Long) = "hashmap_$version.data"
+    private fun getMapFilename(version: Long) = "hashmap_$version.data"
 
-    protected fun getMapPath(version: Long) = path.resolve(getMapFilename(version))
+    protected fun getMapPath(version: Long): Path = path.resolve(getMapFilename(version))
 }
 
 class SimpleHashMapROEnv<K, V>(
@@ -61,12 +64,13 @@ class SimpleHashMapROEnv<K, V>(
         versionBuffer: ByteBuffer
 ) : SimpleHashMapBaseEnv(path, versionBuffer) {
     fun getMap(): SimpleHashMapRO<K, V> {
-        val mapPath = getMapPath(getVersion())
+        val ver = getCurrentVersion()
+        val mapPath = getMapPath(ver)
         val mapBuffer = RandomAccessFile(mapPath.toString(), "r").use { file ->
             val channel = file.channel
             channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
         }
-        return SimpleHashMapROImpl(mapBuffer)
+        return SimpleHashMapROImpl(ver, mapBuffer)
     }
 
     override fun close() {}
@@ -91,18 +95,19 @@ class SimpleHashMapEnv<K, V>(
                 OPEN_RO -> "r"
             }
 
-            fun mapMode() = when (this) {
+            fun mapMode(): FileChannel.MapMode = when (this) {
                 CREATE, OPEN_RW -> FileChannel.MapMode.READ_WRITE
                 OPEN_RO -> FileChannel.MapMode.READ_ONLY
             }
         }
 
-        fun create(path: Path): SimpleHashMapEnv<K, V> {
+        fun open(path: Path): SimpleHashMapEnv<K, V> {
             val verPath = path.resolve(VERSION_FILENAME)
-            val verLock = aquireLock(verPath)
-            val verBuffer = getVersionBuffer(verPath, Mode.CREATE)
-            verBuffer.putLong(0, 0L)
-            return SimpleHashMapEnv(path, verBuffer, verLock)
+            return if (verPath.toFile().exists()) {
+                openWritable(path)
+            } else {
+                create(path)
+            }
         }
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
@@ -111,20 +116,28 @@ class SimpleHashMapEnv<K, V>(
             return SimpleHashMapROEnv(path, verBuffer)
         }
 
-        fun openWritable(path: Path): SimpleHashMapEnv<K, V> {
+        private fun create(path: Path): SimpleHashMapEnv<K, V> {
             val verPath = path.resolve(VERSION_FILENAME)
-            val verLock = aquireLock(verPath)
+            val verLock = acquireLock(verPath)
+            val verBuffer = getVersionBuffer(verPath, Mode.CREATE)
+            verBuffer.putLong(0, 0L)
+            return SimpleHashMapEnv(path, verBuffer, verLock)
+        }
+
+        private fun openWritable(path: Path): SimpleHashMapEnv<K, V> {
+            val verPath = path.resolve(VERSION_FILENAME)
+            val verLock = acquireLock(verPath)
             val verBuffer = getVersionBuffer(verPath, Mode.OPEN_RW)
             return SimpleHashMapEnv(path, verBuffer, verLock)
         }
 
-        private fun aquireLock(path: Path): FileLock {
+        private fun acquireLock(path: Path): FileLock {
             val lockChannel = RandomAccessFile(path.toString(), "rw").channel
             return try {
                 lockChannel.tryLock()
-                        ?: throw WriteLockException("Cannot aquire a write lock of the file: $path")
+                        ?: throw WriteLockException("Cannot acquire a write lock of the file: $path")
             } catch (e: OverlappingFileLockException) {
-                throw WriteLockException("Cannot aquire a write lock of the file: $path", e)
+                throw WriteLockException("Cannot acquire a write lock of the file: $path", e)
             }
         }
 
@@ -148,12 +161,13 @@ class SimpleHashMapEnv<K, V>(
     }
 
     fun getMap(): SimpleHashMap<K, V> {
-        val mapPath = getMapPath(getVersion())
+        val ver = getCurrentVersion()
+        val mapPath = getMapPath(ver)
         val mapBuffer = RandomAccessFile(mapPath.toString(), "rw").use { file ->
             val channel = file.channel
             channel.map(FileChannel.MapMode.READ_WRITE, 0, channel.size())
         }
-        return SimpleHashMapImpl(mapBuffer)
+        return SimpleHashMapImpl(ver, mapBuffer)
     }
 
     override fun close() {
