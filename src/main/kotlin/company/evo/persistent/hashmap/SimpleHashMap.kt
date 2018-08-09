@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Path
+import java.util.concurrent.locks.ReentrantLock
 
 open class PersistentHashMapException(msg: String, cause: Exception? = null) : Exception(msg, cause)
 class WriteLockException(msg: String, cause: Exception? = null) : PersistentHashMapException(msg, cause)
@@ -52,28 +53,104 @@ abstract class SimpleHashMapBaseEnv(
         const val MAX_RETRIES = 100
     }
 
-    fun getCurrentVersion() = versionBuffer.getLong(0)
-
-    private fun getMapFilename(version: Long) = "hashmap_$version.data"
-
-    protected fun getMapPath(version: Long): Path = path.resolve(getMapFilename(version))
+    fun readCurrentVersion() = versionBuffer.getLong(0)
 }
 
 class SimpleHashMapROEnv<K, V>(
-        path: Path,
-        versionBuffer: ByteBuffer
-) : SimpleHashMapBaseEnv(path, versionBuffer) {
+        private val mapDir: MapDirectory
+) : SimpleHashMapBaseEnv(mapDir.dir) {
+
+    private val lock = ReentrantLock()
+
+    @Volatile
+    private var curVersion: Long = 0
+
+    @Volatile
+    private var curBuffer: ByteBuffer = mapDir.openMap(readCurrentVersion())
+
     fun getMap(): SimpleHashMapRO<K, V> {
-        val ver = getCurrentVersion()
-        val mapPath = getMapPath(ver)
-        val mapBuffer = RandomAccessFile(mapPath.toString(), "r").use { file ->
-            val channel = file.channel
-            channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+        val ver = readCurrentVersion()
+        if (ver != curVersion) {
+            if (lock.tryLock()) {
+                try {
+                    // TODO Do it in a cycle
+                    refresh(ver)
+                } finally {
+                    lock.unlock()
+                }
+            }
         }
-        return SimpleHashMapROImpl(ver, mapBuffer)
+
+        return SimpleHashMapROImpl(ver, curBuffer.duplicate())
+    }
+
+    private fun refresh(ver: Long) {
+        curVersion = ver
+        curBuffer = mapDir.openMap(ver)
     }
 
     override fun close() {}
+}
+
+enum class Mode {
+    CREATE, OPEN_RO, OPEN_RW;
+
+    fun mode() = when (this) {
+        CREATE, OPEN_RW -> "rw"
+        OPEN_RO -> "r"
+    }
+
+    fun mapMode(): FileChannel.MapMode = when (this) {
+        CREATE, OPEN_RW -> FileChannel.MapMode.READ_WRITE
+        OPEN_RO -> FileChannel.MapMode.READ_ONLY
+    }
+}
+
+class MapDirectory(
+        val dir: Path,
+        val mode: Mode
+) {
+    companion object {
+        private const val VERSION_FILENAME = "hashmap.ver"
+        private const val VERSION_LENGTH = 8L
+
+        private fun getMapFilename(version: Long) = "hashmap_$version.data"
+
+        private fun getMapPath(dir: Path, version: Long): Path = dir.resolve(getMapFilename(version))
+
+        internal fun getVersionPath(dir: Path): Path = dir.resolve(VERSION_FILENAME)
+
+        private fun getVersionBuffer(dir: Path, mode: Mode): ByteBuffer {
+            return RandomAccessFile(dir.toString(), mode.mode())
+                    .use { file ->
+                        when (mode) {
+                            Mode.CREATE -> file.setLength(VERSION_LENGTH)
+                            Mode.OPEN_RO, Mode.OPEN_RW -> {
+                                if (file.length() != VERSION_LENGTH) {
+                                    throw CorruptedVersionFileException(
+                                            "Version file must have size $VERSION_LENGTH"
+                                    )
+                                }
+                            }
+                        }
+                        val channel = file.channel
+                        channel.map(mode.mapMode(), 0, channel.size())
+                    }
+        }
+    }
+
+    val versionPath = getVersionPath(dir)
+    private val versionBuffer = getVersionBuffer(dir, mode)
+
+    fun readCurrentVersion() = versionBuffer.getLong(0)
+
+    fun openMap(version: Long): ByteBuffer {
+        return RandomAccessFile(getMapPath(dir, version).toString(), mode.mode()).use { file ->
+            val channel = file.channel
+            channel.map(mode.mapMode(), 0, channel.size())
+        }
+    }
+
 }
 
 class SimpleHashMapEnv<K, V>(
@@ -82,27 +159,8 @@ class SimpleHashMapEnv<K, V>(
         private val versionFileLock: FileLock
 ) : SimpleHashMapBaseEnv(path, versionBuffer) {
     class Builder<K, V> {
-        companion object {
-            const val VERSION_FILENAME = "hashmap.ver"
-            const val VERSION_LENGTH = 8L
-        }
-
-        private enum class Mode {
-            CREATE, OPEN_RO, OPEN_RW;
-
-            fun mode() = when (this) {
-                CREATE, OPEN_RW -> "rw"
-                OPEN_RO -> "r"
-            }
-
-            fun mapMode(): FileChannel.MapMode = when (this) {
-                CREATE, OPEN_RW -> FileChannel.MapMode.READ_WRITE
-                OPEN_RO -> FileChannel.MapMode.READ_ONLY
-            }
-        }
-
         fun open(path: Path): SimpleHashMapEnv<K, V> {
-            val verPath = path.resolve(VERSION_FILENAME)
+            val verPath = MapDirectory.getVersionPath(path)
             return if (verPath.toFile().exists()) {
                 openWritable(path)
             } else {
@@ -111,15 +169,14 @@ class SimpleHashMapEnv<K, V>(
         }
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
-            val verPath = path.resolve(VERSION_FILENAME)
-            val verBuffer = getVersionBuffer(verPath, Mode.OPEN_RO)
-            return SimpleHashMapROEnv(path, verBuffer)
+            val mapDir = MapDirectory(path, Mode.OPEN_RO)
+            return SimpleHashMapROEnv(mapDir)
         }
 
         private fun create(path: Path): SimpleHashMapEnv<K, V> {
-            val verPath = path.resolve(VERSION_FILENAME)
-            val verLock = acquireLock(verPath)
-            val verBuffer = getVersionBuffer(verPath, Mode.CREATE)
+            val mapDir = MapDirectory(path, Mode.CREATE)
+            val verLock = acquireLock(mapDir.dir)
+            val verBuffer = mapDir.versionBuffer
             verBuffer.putLong(0, 0L)
             return SimpleHashMapEnv(path, verBuffer, verLock)
         }
@@ -141,27 +198,10 @@ class SimpleHashMapEnv<K, V>(
             }
         }
 
-        private fun getVersionBuffer(path: Path, mode: Mode): ByteBuffer {
-            return RandomAccessFile(path.toString(), mode.mode())
-                    .use { file ->
-                        when (mode) {
-                            Mode.CREATE -> file.setLength(VERSION_LENGTH)
-                            Mode.OPEN_RO, Mode.OPEN_RW -> {
-                                if (file.length() != VERSION_LENGTH) {
-                                    throw CorruptedVersionFileException(
-                                            "Version file must have size $VERSION_LENGTH"
-                                    )
-                                }
-                            }
-                        }
-                        val channel = file.channel
-                        channel.map(mode.mapMode(), 0, channel.size())
-                    }
-        }
     }
 
     fun getMap(): SimpleHashMap<K, V> {
-        val ver = getCurrentVersion()
+        val ver = readCurrentVersion()
         val mapPath = getMapPath(ver)
         val mapBuffer = RandomAccessFile(mapPath.toString(), "rw").use { file ->
             val channel = file.channel

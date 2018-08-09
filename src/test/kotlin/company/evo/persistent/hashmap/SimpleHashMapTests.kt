@@ -25,10 +25,10 @@ class SimpleHashMapTests : FunSpec() {
                 .config(extensions = listOf(TempDirInterceptor()))
         {
             SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
+                env.readCurrentVersion() shouldBe 0L
 
                 val roMap = SimpleHashMapEnv.Builder<Int, Float>().openReadOnly(tmpDirPath)
-                roMap.getCurrentVersion() shouldBe 0L
+                roMap.readCurrentVersion() shouldBe 0L
 
                 shouldThrow<WriteLockException> {
                     SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath)
@@ -37,7 +37,7 @@ class SimpleHashMapTests : FunSpec() {
             }
 
             SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
+                env.readCurrentVersion() shouldBe 0L
             }
         }
 
@@ -45,7 +45,7 @@ class SimpleHashMapTests : FunSpec() {
                 .config(extensions = listOf(TempDirInterceptor()))
         {
             SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
+                env.readCurrentVersion() shouldBe 0L
                 val map = env.getMap()
             }
         }
