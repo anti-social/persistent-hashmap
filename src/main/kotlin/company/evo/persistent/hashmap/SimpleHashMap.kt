@@ -45,20 +45,19 @@ class SimpleHashMapImpl<K, V>(
 }
 
 abstract class SimpleHashMapBaseEnv(
-        protected val path: Path,
-        private val versionBuffer: ByteBuffer
+        protected val mapDir: MapDirectory
 ) : AutoCloseable
 {
     companion object {
         const val MAX_RETRIES = 100
     }
 
-    fun readCurrentVersion() = versionBuffer.getLong(0)
+    fun getCurrentVersion() = mapDir.readVersion()
 }
 
 class SimpleHashMapROEnv<K, V>(
-        private val mapDir: MapDirectory
-) : SimpleHashMapBaseEnv(mapDir.dir) {
+        mapDir: MapDirectory
+) : SimpleHashMapBaseEnv(mapDir) {
 
     private val lock = ReentrantLock()
 
@@ -66,10 +65,10 @@ class SimpleHashMapROEnv<K, V>(
     private var curVersion: Long = 0
 
     @Volatile
-    private var curBuffer: ByteBuffer = mapDir.openMap(readCurrentVersion())
+    private var curBuffer: ByteBuffer = mapDir.openMap(mapDir.readVersion())
 
     fun getMap(): SimpleHashMapRO<K, V> {
-        val ver = readCurrentVersion()
+        val ver = mapDir.readVersion()
         if (ver != curVersion) {
             if (lock.tryLock()) {
                 try {
@@ -107,7 +106,7 @@ enum class Mode {
 }
 
 class MapDirectory(
-        val dir: Path,
+        val path: Path,
         val mode: Mode
 ) {
     companion object {
@@ -121,7 +120,7 @@ class MapDirectory(
         internal fun getVersionPath(dir: Path): Path = dir.resolve(VERSION_FILENAME)
 
         private fun getVersionBuffer(dir: Path, mode: Mode): ByteBuffer {
-            return RandomAccessFile(dir.toString(), mode.mode())
+            return RandomAccessFile(getVersionPath(dir).toString(), mode.mode())
                     .use { file ->
                         when (mode) {
                             Mode.CREATE -> file.setLength(VERSION_LENGTH)
@@ -139,25 +138,35 @@ class MapDirectory(
         }
     }
 
-    val versionPath = getVersionPath(dir)
-    private val versionBuffer = getVersionBuffer(dir, mode)
+    val versionPath = getVersionPath(path)
+    private val versionBuffer = getVersionBuffer(path, mode)
 
-    fun readCurrentVersion() = versionBuffer.getLong(0)
+    fun readVersion() = versionBuffer.getLong(0)
+
+    fun writeVersion(version: Long) = versionBuffer.putLong(0, version)
+
+    fun acquireLock(): FileLock {
+        val lockChannel = RandomAccessFile(versionPath.toString(), "rw").channel
+        return try {
+            lockChannel.tryLock()
+                    ?: throw WriteLockException("Cannot acquire a write lock of the file: $path")
+        } catch (e: OverlappingFileLockException) {
+            throw WriteLockException("Cannot acquire a write lock of the file: $path", e)
+        }
+    }
 
     fun openMap(version: Long): ByteBuffer {
-        return RandomAccessFile(getMapPath(dir, version).toString(), mode.mode()).use { file ->
+        return RandomAccessFile(getMapPath(path, version).toString(), mode.mode()).use { file ->
             val channel = file.channel
             channel.map(mode.mapMode(), 0, channel.size())
         }
     }
-
 }
 
 class SimpleHashMapEnv<K, V>(
-        path: Path,
-        versionBuffer: ByteBuffer,
+        mapDir: MapDirectory,
         private val versionFileLock: FileLock
-) : SimpleHashMapBaseEnv(path, versionBuffer) {
+) : SimpleHashMapBaseEnv(mapDir) {
     class Builder<K, V> {
         fun open(path: Path): SimpleHashMapEnv<K, V> {
             val verPath = MapDirectory.getVersionPath(path)
@@ -175,38 +184,23 @@ class SimpleHashMapEnv<K, V>(
 
         private fun create(path: Path): SimpleHashMapEnv<K, V> {
             val mapDir = MapDirectory(path, Mode.CREATE)
-            val verLock = acquireLock(mapDir.dir)
-            val verBuffer = mapDir.versionBuffer
-            verBuffer.putLong(0, 0L)
-            return SimpleHashMapEnv(path, verBuffer, verLock)
+            val verLock = mapDir.acquireLock()
+            val verBuffer = mapDir.writeVersion(0L)
+            mapDir.openMap(0L)
+            return SimpleHashMapEnv(mapDir, verLock)
         }
 
         private fun openWritable(path: Path): SimpleHashMapEnv<K, V> {
-            val verPath = path.resolve(VERSION_FILENAME)
-            val verLock = acquireLock(verPath)
-            val verBuffer = getVersionBuffer(verPath, Mode.OPEN_RW)
-            return SimpleHashMapEnv(path, verBuffer, verLock)
-        }
-
-        private fun acquireLock(path: Path): FileLock {
-            val lockChannel = RandomAccessFile(path.toString(), "rw").channel
-            return try {
-                lockChannel.tryLock()
-                        ?: throw WriteLockException("Cannot acquire a write lock of the file: $path")
-            } catch (e: OverlappingFileLockException) {
-                throw WriteLockException("Cannot acquire a write lock of the file: $path", e)
-            }
+            val mapDir = MapDirectory(path, Mode.OPEN_RW)
+            val verLock = mapDir.acquireLock()
+            return SimpleHashMapEnv(mapDir, verLock)
         }
 
     }
 
     fun getMap(): SimpleHashMap<K, V> {
-        val ver = readCurrentVersion()
-        val mapPath = getMapPath(ver)
-        val mapBuffer = RandomAccessFile(mapPath.toString(), "rw").use { file ->
-            val channel = file.channel
-            channel.map(FileChannel.MapMode.READ_WRITE, 0, channel.size())
-        }
+        val ver = mapDir.readVersion()
+        val mapBuffer = mapDir.openMap(ver)
         return SimpleHashMapImpl(ver, mapBuffer)
     }
 
