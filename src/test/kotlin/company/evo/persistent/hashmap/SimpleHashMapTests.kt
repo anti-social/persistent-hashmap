@@ -21,33 +21,50 @@ class SimpleHashMapTests : FunSpec() {
             1 shouldBe 1
         }
 
-        test("locking: single writer, multiple readers")
+        test("env: single writer, multiple readers")
                 .config(extensions = listOf(TempDirInterceptor()))
         {
-            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
+            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                    .open(tmpDirPath)
+                    .use { env ->
+                        env.getCurrentVersion() shouldBe 0L
 
-                val roMap = SimpleHashMapEnv.Builder<Int, Float>().openReadOnly(tmpDirPath)
-                roMap.getCurrentVersion() shouldBe 0L
+                        SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                                .openReadOnly(tmpDirPath)
+                                .use { roEnv ->
+                                    roEnv.getCurrentVersion() shouldBe 0L
+                                }
 
-                shouldThrow<WriteLockException> {
-                    SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath)
-                }
+                        shouldThrow<WriteLockException> {
+                            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                                    .open(tmpDirPath)
+                        }
+                    }
 
-            }
-
-            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
-            }
+            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                    .open(tmpDirPath)
+                    .use { env ->
+                        env.getCurrentVersion() shouldBe 0L
+                    }
         }
 
-        test("getting map")
+        test("env: copy map")
                 .config(extensions = listOf(TempDirInterceptor()))
         {
-            SimpleHashMapEnv.Builder<Int, Float>().open(tmpDirPath).use { env ->
-                env.getCurrentVersion() shouldBe 0L
-                // val map = env.getMap()
-            }
+            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                    .open(tmpDirPath)
+                    .use { env ->
+                        val map = env.getMap()
+                        env.getCurrentVersion() shouldBe 0L
+                        env.copyMap(map)
+                        env.getCurrentVersion() shouldBe 1L
+
+                        SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                                .openReadOnly(tmpDirPath)
+                                .use { roEnv ->
+                                    roEnv.getCurrentVersion() shouldBe 1L
+                                }
+                    }
         }
     }
 
