@@ -8,30 +8,58 @@ import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Path
 
-open class VersionedDirectoryException(msg: String, cause: Exception? = null) : Exception(msg, cause)
-class WriteLockException(msg: String, cause: Exception? = null) : VersionedDirectoryException(msg, cause)
+open class VersionedDirectoryException(
+        msg: String, cause: Exception? = null
+) : Exception(msg, cause)
+class WriteLockException(
+        msg: String, cause: Exception? = null
+) : VersionedDirectoryException(msg, cause)
 class CorruptedVersionFileException(msg: String) : VersionedDirectoryException(msg)
 class ReadOnlyException(msg: String) : VersionedDirectoryException(msg)
 class FileAlreadyExistsException(msg: String) : VersionedDirectoryException(msg)
 class FileDoesNotExistException(msg: String) : VersionedDirectoryException(msg)
 
-class VersionedDirectory private constructor(
+interface VersionedDirectory {
+    fun readVersion(): Long
+    fun writeVersion(version: Long)
+    fun createFile(name: String, size: Int): ByteBuffer
+    fun openFileWritable(name: String): ByteBuffer
+    fun openFileReadOnly(name: String): ByteBuffer
+
+    companion object {
+        const val VERSION_LENGTH = 8
+        val VERSION_BYTE_ORDER = ByteOrder.LITTLE_ENDIAN
+    }
+}
+
+abstract class AbstractVersionedDirectory(
+        private val versionBuffer: ByteBuffer
+) : VersionedDirectory {
+
+    override fun readVersion() = versionBuffer.getLong(0)
+
+    override fun writeVersion(version: Long) {
+        versionBuffer.putLong(0, version)
+    }
+}
+
+class VersionedMmapDirectory private constructor(
         val path: Path,
         val versionFilename: String,
-        private val versionBuffer: ByteBuffer,
+        versionBuffer: ByteBuffer,
         private val writeLock: FileLock? = null,
         val created: Boolean = false
-) : AutoCloseable {
+) : AutoCloseable, AbstractVersionedDirectory(versionBuffer) {
     companion object {
-        private const val VERSION_LENGTH = 8
-
-        private fun getVersionPath(path: Path, versionFilename: String) = path.resolve(versionFilename)
+        private fun getVersionPath(path: Path, versionFilename: String): Path {
+            return path.resolve(versionFilename)
+        }
 
         private fun getVersionBuffer(versionPath: Path, mode: Mode): ByteBuffer {
             val versionBuffer = mmapFile(versionPath, mode)
-            if (versionBuffer.capacity() != VERSION_LENGTH) {
+            if (versionBuffer.capacity() != VersionedDirectory.VERSION_LENGTH) {
                 throw CorruptedVersionFileException(
-                        "Version file must have size $VERSION_LENGTH"
+                        "Version file must have size ${VersionedDirectory.VERSION_LENGTH}"
                 )
             }
             return versionBuffer
@@ -41,21 +69,27 @@ class VersionedDirectory private constructor(
             val lockChannel = RandomAccessFile(versionPath.toString(), "rw").channel
             return try {
                 lockChannel.tryLock()
-                        ?: throw WriteLockException("Cannot acquire a write lock of the file: $versionPath")
+                        ?: throw WriteLockException(
+                                "Cannot acquire a write lock of the file: $versionPath"
+                        )
             } catch (e: OverlappingFileLockException) {
-                throw WriteLockException("Cannot acquire a write lock of the file: $versionPath", e)
+                throw WriteLockException(
+                        "Cannot acquire a write lock of the file: $versionPath", e
+                )
             }
         }
 
         fun openWritable(path: Path, versionFilename: String): VersionedDirectory {
             val versionPath = getVersionPath(path, versionFilename)
             val (versionBuffer, created) = if (!versionPath.toFile().exists()) {
-                getVersionBuffer(versionPath, Mode.Create(VERSION_LENGTH)) to true
+                getVersionBuffer(versionPath, Mode.Create(VersionedDirectory.VERSION_LENGTH)) to true
             } else {
                 getVersionBuffer(versionPath, Mode.OpenRW()) to false
             }
             val versionLock = acquireLock(versionPath)
-            return VersionedDirectory(path, versionFilename, versionBuffer, versionLock, created = created)
+            return VersionedMmapDirectory(
+                    path, versionFilename, versionBuffer, versionLock, created = created
+            )
         }
 
         fun openReadOnly(path: Path, versionFilename: String): VersionedDirectory {
@@ -64,7 +98,7 @@ class VersionedDirectory private constructor(
                 throw FileDoesNotExistException("Version file $versionPath does not exist")
             }
             val versionBuffer = getVersionBuffer(versionPath, Mode.OpenRO())
-            return VersionedDirectory(path, versionFilename, versionBuffer)
+            return VersionedMmapDirectory(path, versionFilename, versionBuffer)
         }
 
         private fun mmapFile(filepath: Path, mode: Mode): ByteBuffer {
@@ -93,11 +127,7 @@ class VersionedDirectory private constructor(
 
     val versionPath = getVersionPath(path, versionFilename)
 
-    fun readVersion() = versionBuffer.getLong(0)
-
-    fun writeVersion(version: Long) = versionBuffer.putLong(0, version)
-
-    fun createFile(name: String, size: Int): ByteBuffer {
+    override fun createFile(name: String, size: Int): ByteBuffer {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (filepath.toFile().exists()) {
@@ -106,7 +136,7 @@ class VersionedDirectory private constructor(
         return mmapFile(filepath, Mode.Create(size))
     }
 
-    fun openFileWritable(name: String): ByteBuffer {
+    override fun openFileWritable(name: String): ByteBuffer {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
@@ -115,7 +145,7 @@ class VersionedDirectory private constructor(
         return mmapFile(filepath, Mode.OpenRW())
     }
 
-    fun openFileReadOnly(name: String): ByteBuffer {
+    override fun openFileReadOnly(name: String): ByteBuffer {
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException("Cannot open $filepath: does not exist")

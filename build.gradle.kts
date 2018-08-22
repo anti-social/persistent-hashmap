@@ -1,9 +1,23 @@
+import com.github.erizo.gradle.JcstressPluginExtension
 import org.jetbrains.kotlin.gradle.dsl.Coroutines
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.1")
+    }
+}
 
 plugins {
     java
     kotlin("jvm") version "1.2.41"
+}
+
+apply {
+    plugin("jcstress")
 }
 
 group = "company.evo"
@@ -39,4 +53,8 @@ kotlin {
 
 val test by tasks.getting(Test::class) {
     useJUnitPlatform()
+}
+
+configure<JcstressPluginExtension> {
+    jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
 }

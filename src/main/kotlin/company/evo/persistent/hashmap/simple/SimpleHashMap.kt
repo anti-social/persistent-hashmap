@@ -8,6 +8,10 @@ import java.nio.ByteBuffer
 open class PersistentHashMapException(msg: String, cause: Exception? = null) : Exception(msg, cause)
 class InvalidHashtableException(msg: String) : PersistentHashMapException(msg)
 
+enum class PutResult {
+    OK, OVERFLOW
+}
+
 interface SimpleHashMapRO<K, V> {
     val version: Long
     val header: SimpleHashMap.Header
@@ -16,7 +20,7 @@ interface SimpleHashMapRO<K, V> {
 }
 
 interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
-    fun put(key: K, value: V): Boolean
+    fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
 
     class Header(
@@ -225,7 +229,7 @@ class SimpleHashMapImpl<K, V>(
         bucketLayout,
         bucketsPerPage
 ) {
-    override fun put(key: K, value: V): Boolean {
+    override fun put(key: K, value: V): PutResult {
         val hash = keySerializer.hash(key)
         find(
                 hash,
@@ -239,17 +243,17 @@ class SimpleHashMapImpl<K, V>(
                 },
                 notFound = { bucketOffset, dist ->
                     if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
-                        return false
+                        return PutResult.OVERFLOW
                     }
                     if (size() >= header.maxEntries) {
-                        return false
+                        return PutResult.OVERFLOW
                     }
                     writeBucketData(bucketOffset, key, value)
                     writeBucketMeta(bucketOffset, META_OCCUPIED)
                     writeSize(size() + 1)
                 }
         )
-        return true
+        return PutResult.OK
     }
 
     override fun remove(key: K): Boolean {
