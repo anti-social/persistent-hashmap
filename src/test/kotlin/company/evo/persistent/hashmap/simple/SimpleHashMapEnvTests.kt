@@ -45,7 +45,7 @@ class SimpleHashMapEnvTests : FunSpec() {
                 SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
                         .open(tmpDir)
                         .use { env ->
-                            val map = env.getMap()
+                            val map = env.openMap()
                             env.getCurrentVersion() shouldBe 0L
                             env.copyMap(map)
                             env.getCurrentVersion() shouldBe 1L
@@ -57,6 +57,14 @@ class SimpleHashMapEnvTests : FunSpec() {
                                     }
                         }
             }
+        }
+
+        test("env: anonymous") {
+            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                    .createAnonymousHeap()
+                    .use { env ->
+                        env.openMap()
+                    }
         }
     }
 }

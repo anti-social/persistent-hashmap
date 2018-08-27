@@ -1,10 +1,16 @@
 package company.evo.persistent.hashmap.simple
 
+import company.evo.persistent.FileDoesNotExistException
 import company.evo.persistent.VersionedDirectory
+import company.evo.persistent.VersionedMmapDirectory
+import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.BucketLayout
+import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
+
 import java.nio.ByteBuffer
 import java.nio.file.Path
+import java.nio.file.Paths
 
 import java.util.concurrent.locks.ReentrantLock
 
@@ -28,11 +34,12 @@ abstract class SimpleHashMapBaseEnv(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class SimpleHashMapROEnv<K, V>(
+class SimpleHashMapROEnv<K, V> (
         dir: VersionedDirectory,
-        private val keySerializer: Serializer<K>,
-        private val valueSerializer: Serializer<V>,
-        private val bucketLayout: BucketLayout
+        val keySerializer: Serializer<K>,
+        val valueSerializer: Serializer<V>,
+        val bucketLayout: BucketLayout,
+        val bucketsPerPage: Int
 ) : SimpleHashMapBaseEnv(dir) {
 
     private val lock = ReentrantLock()
@@ -43,25 +50,45 @@ class SimpleHashMapROEnv<K, V>(
     @Volatile
     private var curBuffer: ByteBuffer = dir.openFileReadOnly(getHashmapFilename(dir.readVersion()))
 
-    fun getMap(): SimpleHashMapRO<K, V> {
-        val ver = dir.readVersion()
-        if (ver != curVersion) {
+    fun currentMap(): SimpleHashMapRO<K, V> {
+        var ver = dir.readVersion()
+        var i = 0
+        while (ver != curVersion) {
             if (lock.tryLock()) {
                 try {
-                    // TODO Do it in a cycle
-                    refresh(ver)
+                    if (refresh(ver)) {
+                        break
+                    }
                 } finally {
                     lock.unlock()
                 }
             }
+            val newVer = dir.readVersion()
+            if (newVer == ver) {
+                throw FileDoesNotExistException(Paths.get(getHashmapFilename(ver)))
+            }
+            ver = newVer
+            i++
         }
 
-        return SimpleHashMapROImpl(ver, curBuffer.duplicate(), keySerializer, valueSerializer, bucketLayout, -1)
+        return SimpleHashMapRO.fromEnv(
+                this,
+                curBuffer
+                        .duplicate()
+                        .clear()
+                        .order(VersionedDirectory.BYTE_ORDER)
+        )
     }
 
-    private fun refresh(ver: Long) {
-        curVersion = ver
-        curBuffer = dir.openFileReadOnly(getHashmapFilename(ver))
+    private fun refresh(ver: Long): Boolean {
+        try {
+            val mapBuffer = dir.openFileReadOnly(getHashmapFilename(ver))
+            curVersion = ver
+            curBuffer = mapBuffer
+        } catch (e: FileDoesNotExistException) {
+            return false
+        }
+        return true
     }
 
     override fun close() {}
@@ -69,11 +96,11 @@ class SimpleHashMapROEnv<K, V>(
 
 class SimpleHashMapEnv<K, V> private constructor(
         dir: VersionedDirectory,
-        private val keySerializer: Serializer<K>,
-        private val valueSerializer: Serializer<V>,
-        private val bucketLayout: BucketLayout,
-        private val numDataPages: Int,
-        private val bucketsPerPage: Int
+        val keySerializer: Serializer<K>,
+        val valueSerializer: Serializer<V>,
+        val bucketLayout: BucketLayout,
+        val numDataPages: Int,
+        val bucketsPerPage: Int
 ) : SimpleHashMapBaseEnv(dir) {
     class Builder<K, V>(keyClass: Class<K>, valueClass: Class<V>) {
         private val keySerializer: Serializer<K> = Serializer.getForClass(keyClass)
@@ -87,21 +114,6 @@ class SimpleHashMapEnv<K, V> private constructor(
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_LOAD_FACTOR = 0.75
-            private val PRIMES = intArrayOf(
-                    // http://referencesource.microsoft.com/#mscorlib/system/collections/hashtable.cs,1663
-                    163, 197, 239, 293, 353, 431,
-                    521, 631, 761, 919, 1103, 1327, 1597, 1931, 2333, 2801, 3371, 4049, 4861, 5839,
-                    7013, 8419, 10103, 12143, 14591, 17519, 21023, 25229, 30293, 36353, 43627, 52361,
-                    62851, 75431, 90523, 108_631, 130_363, 156_437, 187_751, 225_307, 270_371, 324_449,
-                    389_357, 467_237, 560_689, 672_827, 807_403, 968_897, 1_162_687, 1_395_263,
-                    1_674_319, 2_009_191, 2_411_033, 2_893_249, 3_471_899, 4_166_287, 4_999_559,
-                    5_999_471, 7_199_369,
-                    // C++ stl (gcc) and
-                    // http://www.orcca.on.ca/~yxie/courses/cs2210b-2011/htmls/extra/PlanetMath_%20goodhashtable.pdf
-                    8_175_383, 12_582_917, 16_601_593, 25_165_843, 33_712_729, 50_331_653, 68_460_391,
-                    100_663_319, 139_022_417, 201_326_611, 282_312_799, 402_653_189, 573_292_817,
-                    805_306_457, 1_164_186_217, 1_610_612_741, 2_147_483_647
-            )
         }
 
         var initialEntries: Int = PRIMES[0]
@@ -146,7 +158,7 @@ class SimpleHashMapEnv<K, V> private constructor(
         }
 
         fun open(path: Path): SimpleHashMapEnv<K, V> {
-            val dir = VersionedDirectory.openWritable(path, VERSION_FILENAME)
+            val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             return if (dir.created) {
                 create(dir)
             } else {
@@ -155,17 +167,26 @@ class SimpleHashMapEnv<K, V> private constructor(
         }
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
-            val dir = VersionedDirectory.openReadOnly(path, VERSION_FILENAME)
-            return SimpleHashMapROEnv(dir, keySerializer, valueSerializer, bucketLayout)
+            val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
+            return SimpleHashMapROEnv(dir, keySerializer, valueSerializer, bucketLayout, calcBucketsPerPage(bucketLayout))
+        }
+
+        fun createAnonymousDirect(): SimpleHashMapEnv<K, V> {
+            val dir = VersionedRamDirectory.createDirect()
+            return create(dir)
+        }
+
+        fun createAnonymousHeap(): SimpleHashMapEnv<K, V> {
+            val dir = VersionedRamDirectory.createHeap()
+            return create(dir)
         }
 
         private fun create(dir: VersionedDirectory): SimpleHashMapEnv<K, V> {
             prepareCreate()
-            println("buffer size: ${calcBufferSize(numDataPages)}")
             val version = dir.readVersion()
-            val mapBuffer = dir.createFile(getHashmapFilename(version), calcBufferSize(numDataPages))
-            val header = SimpleHashMap.Header(capacity, initialEntries)
-            header.dump(mapBuffer)
+            val filename = getHashmapFilename(version)
+            val mapBuffer = dir.createFile(filename, calcBufferSize(numDataPages))
+            SimpleHashMap.initialize(mapBuffer, capacity, initialEntries)
             return SimpleHashMapEnv(dir, keySerializer, valueSerializer, bucketLayout, numDataPages, bucketsPerPage)
         }
 
@@ -174,10 +195,10 @@ class SimpleHashMapEnv<K, V> private constructor(
         }
     }
 
-    fun getMap(): SimpleHashMap<K, V> {
-        val ver = dir.readVersion()
+    fun openMap(): SimpleHashMap<K, V> {
+        val ver = getCurrentVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return SimpleHashMapImpl(ver, mapBuffer, keySerializer, valueSerializer, bucketLayout, bucketsPerPage)
+        return SimpleHashMap.fromEnv(this, mapBuffer)
     }
 
     fun copyMap(map: SimpleHashMap<K, V>): SimpleHashMap<K, V> {
@@ -187,7 +208,8 @@ class SimpleHashMapEnv<K, V> private constructor(
         map.header.dump(mapBuffer)
         // TODO Really copy map data
         dir.writeVersion(newVersion)
-        return getMap()
+        dir.deleteFile(getHashmapFilename(map.version))
+        return openMap()
     }
 
     override fun close() = dir.close()

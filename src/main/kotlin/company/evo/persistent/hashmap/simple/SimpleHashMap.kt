@@ -17,11 +17,42 @@ interface SimpleHashMapRO<K, V> {
     val header: SimpleHashMap.Header
     fun get(key: K, defaultValue: V): V
     fun size(): Int
+
+    companion object {
+        fun <K, V> fromEnv(env: SimpleHashMapROEnv<K, V>, buffer: ByteBuffer): SimpleHashMapRO<K, V> {
+            return SimpleHashMapROImpl(
+                    env.getCurrentVersion(),
+                    buffer,
+                    env.keySerializer,
+                    env.valueSerializer,
+                    env.bucketLayout,
+                    env.bucketsPerPage
+            )
+        }
+    }
 }
 
 interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
+
+    companion object {
+        fun initialize(buffer: ByteBuffer, capacity: Int, initialEntries: Int) {
+            val header = SimpleHashMap.Header(capacity, initialEntries)
+            header.dump(buffer)
+        }
+
+        fun <K, V> fromEnv(env: SimpleHashMapEnv<K, V>, buffer: ByteBuffer): SimpleHashMap<K, V> {
+            return SimpleHashMapImpl(
+                    env.getCurrentVersion(),
+                    buffer,
+                    env.keySerializer,
+                    env.valueSerializer,
+                    env.bucketLayout,
+                    env.bucketsPerPage
+            )
+        }
+    }
 
     class Header(
             val capacity: Int,
@@ -37,6 +68,7 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
             const val TOMBSTONES_OFFSET = 32
 
             fun load(buffer: ByteBuffer): Header {
+                buffer.position(0)
                 val magic = ByteArray(MAGIC.size)
                 buffer.get(magic, 0, MAGIC.size)
                 if (!magic.contentEquals(MAGIC)) {
@@ -60,7 +92,7 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
             private fun toIntOrFail(v: Long, property: String): Int {
                 if (v > Int.MAX_VALUE) {
                     throw InvalidHashtableException(
-                            "Currently maximum supported $property is: ${Int.MAX_VALUE}"
+                            "Currently maximum supported $property is: ${Int.MAX_VALUE}, but was: $v"
                     )
                 }
                 return v.toInt()
@@ -68,6 +100,7 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
         }
 
         fun dump(buffer: ByteBuffer) {
+            buffer.position(0)
             buffer.put(MAGIC, 0, MAGIC.size)
             buffer.putLong(CAPACITY_OFFSET, capacity.toLong())
             buffer.putLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
@@ -214,7 +247,7 @@ open class SimpleHashMapROImpl<K, V>(
     protected fun isBucketThumbstoned(meta: Int) = (meta and META_THUMBSTONE) != 0
 }
 
-class SimpleHashMapImpl<K, V>(
+class SimpleHashMapImpl<K, V> (
         version: Long,
         buffer: ByteBuffer,
         keySerializer: Serializer<K>,

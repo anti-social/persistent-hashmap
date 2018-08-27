@@ -13,21 +13,21 @@ class VersionedDirectoryTest : StringSpec() {
     init {
         "one writer, several readers" {
             withTempDir {
-                VersionedDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
+                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
                     dir.readVersion() shouldBe 0L
 
                     shouldThrow<WriteLockException> {
-                        VersionedDirectory.openWritable(it, VERSION_FILENAME)
+                        VersionedMmapDirectory.openWritable(it, VERSION_FILENAME)
                     }
 
-                    val dirRO = VersionedDirectory.openReadOnly(it, VERSION_FILENAME)
+                    val dirRO = VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME)
                     dirRO.readVersion() shouldBe 0L
 
                     dir.writeVersion(1L)
                     dirRO.readVersion() shouldBe 1L
                 }
 
-                VersionedDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
+                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
                     dir.readVersion() shouldBe 1L
                 }
             }
@@ -36,8 +36,26 @@ class VersionedDirectoryTest : StringSpec() {
         "read uninitialized directory" {
             withTempDir {
                 shouldThrow<FileDoesNotExistException> {
-                    VersionedDirectory.openReadOnly(it, VERSION_FILENAME)
+                    VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME)
                 }
+            }
+        }
+
+        "RAM heap directory" {
+            VersionedRamDirectory.createHeap().use { dir ->
+                dir.readVersion() shouldBe 0L
+
+                dir.writeVersion(1L)
+                dir.readVersion() shouldBe 1L
+            }
+        }
+
+        "RAM direct directory" {
+            VersionedRamDirectory.createDirect().use { dir ->
+                dir.readVersion() shouldBe 0L
+
+                dir.writeVersion(1L)
+                dir.readVersion() shouldBe 1L
             }
         }
     }
