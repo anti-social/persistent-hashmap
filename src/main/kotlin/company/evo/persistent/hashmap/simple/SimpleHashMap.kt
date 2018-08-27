@@ -1,6 +1,8 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.persistent.hashmap.BucketLayout
+import company.evo.persistent.hashmap.PAGE_SIZE
+import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
 
 import java.nio.ByteBuffer
@@ -37,6 +39,8 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
     fun remove(key: K): Boolean
 
     companion object {
+        const val DATA_PAGE_HEADER_SIZE = 16
+
         fun initialize(buffer: ByteBuffer, capacity: Int, initialEntries: Int) {
             val header = SimpleHashMap.Header(capacity, initialEntries)
             header.dump(buffer)
@@ -51,6 +55,23 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
                     env.bucketLayout,
                     env.bucketsPerPage
             )
+        }
+
+        fun calcCapacity(maxEntries: Int, loadFactor: Float): Int {
+            val minCapacity = (maxEntries / loadFactor).toInt()
+            return PRIMES.first { it >= minCapacity }
+        }
+
+        fun calcDataPages(capacity: Int, bucketsPerPage: Int): Int {
+            return (capacity + bucketsPerPage - 1) / bucketsPerPage
+        }
+
+        fun calcBufferSize(numDataPages: Int): Int {
+            return (1 + numDataPages) * PAGE_SIZE
+        }
+
+        fun calcBucketsPerPage(bucketLayout: BucketLayout): Int {
+            return (PAGE_SIZE  - DATA_PAGE_HEADER_SIZE) / bucketLayout.size
         }
     }
 
@@ -122,16 +143,15 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
 open class SimpleHashMapROImpl<K, V>(
         override val version: Long,
         protected val buffer: ByteBuffer,
-        protected val keySerializer: Serializer<K>,
-        protected val valueSerializer: Serializer<V>,
-        protected val bucketLayout: BucketLayout,
-        protected val bucketsPerPage: Int
+        protected val bucketLayout: BucketLayout
 ) : SimpleHashMapRO<K, V> {
 
     companion object {
         const val META_OCCUPIED = 0x8000
         const val META_THUMBSTONE = 0x4000
     }
+
+    val bucketsPerPage = SimpleHashMap.calcBucketsPerPage(bucketLayout)
 
     override val header = SimpleHashMap.Header.load(buffer)
 

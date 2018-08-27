@@ -5,6 +5,7 @@ import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.BucketLayout
+import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
 
@@ -20,13 +21,7 @@ abstract class SimpleHashMapBaseEnv(
 {
     companion object {
         const val MAX_RETRIES = 100
-        const val PAGE_SIZE = 4096
-        const val DATA_PAGE_HEADER_SIZE = 16
         const val MAX_DISTANCE = 1024
-
-        fun calcBufferSize(numDataPages: Int): Int {
-            return (1 + numDataPages) * PAGE_SIZE
-        }
 
         fun getHashmapFilename(version: Long) = "hashmap_$version.data"
     }
@@ -136,19 +131,6 @@ class SimpleHashMapEnv<K, V> private constructor(
                 )
             }
             this.loadFactor = loadFactor
-        }
-
-        private fun calcCapacity(maxEntries: Int): Int {
-            val minCapacity = (maxEntries / loadFactor).toInt()
-            return PRIMES.first { it >= minCapacity }
-        }
-
-        private fun calcDataPages(capacity: Int, bucketsPerPage: Int): Int {
-            return (capacity + bucketsPerPage - 1) / bucketsPerPage
-        }
-
-        private fun calcBucketsPerPage(bucketLayout: BucketLayout): Int {
-            return PAGE_SIZE / bucketLayout.size
         }
 
         private fun prepareCreate() {
