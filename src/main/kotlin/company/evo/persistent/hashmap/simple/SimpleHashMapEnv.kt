@@ -5,7 +5,6 @@ import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.BucketLayout
-import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
 
@@ -20,7 +19,7 @@ abstract class SimpleHashMapBaseEnv(
 ) : AutoCloseable
 {
     companion object {
-        const val MAX_RETRIES = 100
+        const val MAX_RETRIES = 1000
         const val MAX_DISTANCE = 1024
 
         fun getHashmapFilename(version: Long) = "hashmap_$version.data"
@@ -31,10 +30,7 @@ abstract class SimpleHashMapBaseEnv(
 
 class SimpleHashMapROEnv<K, V> (
         dir: VersionedDirectory,
-        val keySerializer: Serializer<K>,
-        val valueSerializer: Serializer<V>,
-        val bucketLayout: BucketLayout,
-        val bucketsPerPage: Int
+        val bucketLayout: BucketLayout<K, V>
 ) : SimpleHashMapBaseEnv(dir) {
 
     private val lock = ReentrantLock()
@@ -91,24 +87,21 @@ class SimpleHashMapROEnv<K, V> (
 
 class SimpleHashMapEnv<K, V> private constructor(
         dir: VersionedDirectory,
-        val keySerializer: Serializer<K>,
-        val valueSerializer: Serializer<V>,
-        val bucketLayout: BucketLayout,
-        val numDataPages: Int,
-        val bucketsPerPage: Int
+        val bucketLayout: BucketLayout<K, V>,
+        val loadFactor: Double
 ) : SimpleHashMapBaseEnv(dir) {
     class Builder<K, V>(keyClass: Class<K>, valueClass: Class<V>) {
         private val keySerializer: Serializer<K> = Serializer.getForClass(keyClass)
         private val valueSerializer: Serializer<V> = Serializer.getForClass(valueClass)
-        private val bucketLayout: BucketLayout = BucketLayout(keySerializer.size, valueSerializer.size)
-
-        private var capacity = -1
-        private var numDataPages = -1
-        private var bucketsPerPage = -1
+        private val bucketLayout = BucketLayout(keySerializer, valueSerializer, SimpleHashMap.META_SIZE)
 
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_LOAD_FACTOR = 0.75
+
+            inline operator fun <reified K, reified V> invoke(): Builder<K, V> {
+                return Builder(K::class.java, V::class.java)
+            }
         }
 
         var initialEntries: Int = PRIMES[0]
@@ -133,12 +126,6 @@ class SimpleHashMapEnv<K, V> private constructor(
             this.loadFactor = loadFactor
         }
 
-        private fun prepareCreate() {
-            capacity = calcCapacity(initialEntries)
-            bucketsPerPage = calcBucketsPerPage(bucketLayout)
-            numDataPages = calcDataPages(capacity, bucketsPerPage)
-        }
-
         fun open(path: Path): SimpleHashMapEnv<K, V> {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             return if (dir.created) {
@@ -150,7 +137,7 @@ class SimpleHashMapEnv<K, V> private constructor(
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
-            return SimpleHashMapROEnv(dir, keySerializer, valueSerializer, bucketLayout, calcBucketsPerPage(bucketLayout))
+            return SimpleHashMapROEnv(dir, bucketLayout)
         }
 
         fun createAnonymousDirect(): SimpleHashMapEnv<K, V> {
@@ -164,16 +151,16 @@ class SimpleHashMapEnv<K, V> private constructor(
         }
 
         private fun create(dir: VersionedDirectory): SimpleHashMapEnv<K, V> {
-            prepareCreate()
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
-            val mapBuffer = dir.createFile(filename, calcBufferSize(numDataPages))
-            SimpleHashMap.initialize(mapBuffer, capacity, initialEntries)
-            return SimpleHashMapEnv(dir, keySerializer, valueSerializer, bucketLayout, numDataPages, bucketsPerPage)
+            val mapInfo = MapInfo.calcFor(initialEntries, loadFactor, bucketLayout.size)
+            val mapBuffer = dir.createFile(filename, mapInfo.bufferSize)
+            SimpleHashMap.initBuffer(mapBuffer, bucketLayout, mapInfo)
+            return SimpleHashMapEnv(dir, bucketLayout, loadFactor)
         }
 
         private fun openWritable(dir: VersionedDirectory): SimpleHashMapEnv<K, V> {
-            return SimpleHashMapEnv(dir, keySerializer, valueSerializer, bucketLayout, numDataPages, bucketsPerPage)
+            return SimpleHashMapEnv(dir, bucketLayout, loadFactor)
         }
     }
 
@@ -185,8 +172,12 @@ class SimpleHashMapEnv<K, V> private constructor(
 
     fun copyMap(map: SimpleHashMap<K, V>): SimpleHashMap<K, V> {
         val newVersion = map.version + 1
+        val newMaxEntries = map.maxEntries * 2
+        val mapInfo = MapInfo.calcFor(newMaxEntries, loadFactor, bucketLayout.size)
         // TODO Write into temporary file then rename
-        val mapBuffer = dir.createFile(getHashmapFilename(newVersion), calcBufferSize(numDataPages))
+        val mapBuffer = dir.createFile(
+                getHashmapFilename(newVersion), mapInfo.bufferSize
+        )
         map.header.dump(mapBuffer)
         // TODO Really copy map data
         dir.writeVersion(newVersion)

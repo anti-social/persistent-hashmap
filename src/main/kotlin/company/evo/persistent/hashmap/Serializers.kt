@@ -17,40 +17,25 @@ interface Serializer<T> {
         } as Serializer<T>
     }
 
+    val serial: Long
     val size: Int
     fun hash(v: T): Int
     fun read(buf: java.nio.ByteBuffer, offset: Int): T
     fun write(buf: java.nio.ByteBuffer, offset: Int, v: T)
 }
 
-class DoubleSerializer : Serializer<Double> {
-    override val size = 8
-    override fun hash(v: Double) = abs(v).toInt()
-    override fun read(buf: ByteBuffer, offset: Int) = buf.getDouble(offset)
-    override fun write(buf: ByteBuffer, offset: Int, v: Double) {
-        buf.putDouble(offset, v)
-    }
-}
-
-class FloatSerializer : Serializer<Float> {
-    override val size = 4
-    override fun hash(v: Float) = abs(v).toInt()
-    override fun read(buf: ByteBuffer, offset: Int) = buf.getFloat(offset)
-    override fun write(buf: ByteBuffer, offset: Int, v: Float) {
-        buf.putFloat(offset, v)
-    }
-}
-
-class LongSerializer : Serializer<Long> {
-    override val size = 8
-    override fun hash(v: Long) = abs(v).toInt()
-    override fun read(buf: ByteBuffer, offset: Int) = buf.getLong(offset)
-    override fun write(buf: ByteBuffer, offset: Int, v: Long) {
-        buf.putLong(offset, v)
+class ShortSerializer : Serializer<Short> {
+    override val serial = 1L
+    override val size = 2
+    override fun hash(v: Short) = abs(v.toInt())
+    override fun read(buf: ByteBuffer, offset: Int) = buf.getShort(offset)
+    override fun write(buf: ByteBuffer, offset: Int, v: Short) {
+        buf.putShort(offset, v)
     }
 }
 
 class IntSerializer : Serializer<Int> {
+    override val serial = 2L
     override val size = 4
     override fun hash(v: Int) = abs(v)
     override fun read(buf: ByteBuffer, offset: Int) = buf.getInt(offset)
@@ -59,11 +44,33 @@ class IntSerializer : Serializer<Int> {
     }
 }
 
-class ShortSerializer : Serializer<Short> {
-    override val size = 2
-    override fun hash(v: Short) = abs(v.toInt())
-    override fun read(buf: ByteBuffer, offset: Int) = buf.getShort(offset)
-    override fun write(buf: ByteBuffer, offset: Int, v: Short) {
-        buf.putShort(offset, v)
+class LongSerializer : Serializer<Long> {
+    override val serial = 3L
+    override val size = 8
+    override fun hash(v: Long) = abs(v).toInt()
+    override fun read(buf: ByteBuffer, offset: Int) = buf.getLong(offset)
+    override fun write(buf: ByteBuffer, offset: Int, v: Long) {
+        buf.putLong(offset, v)
     }
 }
+
+class FloatSerializer : Serializer<Float> {
+    override val serial = 4L
+    override val size = 4
+    override fun hash(v: Float) = abs(v).toInt()
+    override fun read(buf: ByteBuffer, offset: Int) = buf.getFloat(offset)
+    override fun write(buf: ByteBuffer, offset: Int, v: Float) {
+        buf.putFloat(offset, v)
+    }
+}
+
+class DoubleSerializer : Serializer<Double> {
+    override val serial = 5L
+    override val size = 8
+    override fun hash(v: Double) = abs(v).toInt()
+    override fun read(buf: ByteBuffer, offset: Int) = buf.getDouble(offset)
+    override fun write(buf: ByteBuffer, offset: Int, v: Double) {
+        buf.putDouble(offset, v)
+    }
+}
+
