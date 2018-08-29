@@ -9,6 +9,16 @@ class BucketLayout<K, V>(
         val metaSize: Int
 ) {
     companion object {
+        operator fun <K, V> invoke(
+                keyClass: Class<K>, valueClass: Class<V>, metaSize: Int
+        ): BucketLayout<K, V> {
+            return BucketLayout(
+                    Serializer.getForClass(keyClass),
+                    Serializer.getForClass(valueClass),
+                    metaSize
+            )
+        }
+
         inline operator fun <reified K, reified V> invoke(metaSize: Int): BucketLayout<K, V> {
             return BucketLayout(
                     Serializer.getForClass(K::class.java),
@@ -16,7 +26,6 @@ class BucketLayout<K, V>(
                     metaSize
             )
         }
-
     }
     val keySize = keySerializer.size
     val valueSize = valueSerializer.size
