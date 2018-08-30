@@ -14,6 +14,7 @@ buildscript {
 plugins {
     java
     kotlin("jvm") version "1.2.41"
+    id("me.champeau.gradle.jmh") version "0.4.7"
 }
 
 apply {
@@ -36,13 +37,15 @@ dependencies {
     testCompile("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
     testCompile("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
     testCompile("commons-io", "commons-io", "2.6")
+
+    jmh("org.openjdk.jmh", "jmh-core", "1.20")
 }
 
 configure<JavaPluginConvention> {
     sourceCompatibility = JavaVersion.VERSION_1_8
 }
 tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "1.8"
+    kotlinOptions.jvmTarget = JavaVersion.VERSION_1_8.toString()
 }
 
 kotlin {
@@ -61,4 +64,16 @@ val test by tasks.getting(Test::class) {
 
 configure<JcstressPluginExtension> {
     jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
+}
+
+
+jmh {
+    System.getProperty("jmh.include")?.let {
+        include = it.split(',')
+    }
+
+    warmupIterations = 2
+    fork = 1
+    iterations = 4
+    timeOnIteration = "1s"
 }
