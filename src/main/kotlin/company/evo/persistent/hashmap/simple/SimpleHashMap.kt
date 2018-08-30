@@ -87,6 +87,8 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
         const val META_FREE = 0x0000
         const val META_OCCUPIED = 0x8000
         const val META_TOMBSTONE = 0x4000
+        const val VER_TAG_BITS = 14
+        const val VER_TAG_MASK = (1 shl VER_TAG_BITS) - 1
 
         fun <K, V> initBuffer(
                 buffer: ByteBuffer,
@@ -275,15 +277,36 @@ open class SimpleHashMapROImpl<K, V>(
         val hash = keySerializer.hash(key)
         find(
                 hash,
-                maybeFound = { bucketOffset, _, _ ->
-                    when (key) {
-                        bucketLayout.readKey(buffer, bucketOffset) -> {
-                            return bucketLayout.readValue(buffer, bucketOffset)
+                maybeFound = { bucketOffset, _, meta ->
+//                    when (key) {
+//                        bucketLayout.readKey(buffer, bucketOffset) -> {
+//                            return bucketLayout.readValue(buffer, bucketOffset)
+//                        }
+//                        else -> {
+//                            false
+//                        }
+//                    }
+                    var m = meta
+                    var value: V
+                    while (true) {
+                        value = when (key) {
+                            bucketLayout.readKey(buffer, bucketOffset) -> {
+                                bucketLayout.readValue(buffer, bucketOffset)
+                            }
+                            else -> {
+                                return@find false
+                            }
                         }
-                        else -> {
-                            false
+                        val meta2 = readBucketMeta(bucketOffset)
+                        if (m == meta2) {
+                            break
+                        }
+                        m = meta2
+                        if (isBucketTombstoned(m)) {
+                            return@find false
                         }
                     }
+                    return value
                 },
                 notFound = { _, _, _ ->
                     return defaultValue
@@ -294,8 +317,8 @@ open class SimpleHashMapROImpl<K, V>(
 
     protected inline fun find(
             hash: Int,
-            maybeFound: (offset: Int, bucketIx: Int, distance: Int) -> Boolean,
-            notFound: (offset: Int, tombstoneOffset: Int, distance: Int) -> Unit
+            maybeFound: (offset: Int, bucketIx: Int, meta: Int) -> Boolean,
+            notFound: (offset: Int, tombstoneOffset: Int, meta: Int) -> Unit
     ) {
         var dist = -1
         var firstTombstoneBucketOffset = -1
@@ -310,10 +333,10 @@ open class SimpleHashMapROImpl<K, V>(
                 continue
             }
             if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
-                notFound(bucketOffset, firstTombstoneBucketOffset, dist)
+                notFound(bucketOffset, firstTombstoneBucketOffset, meta)
                 return
             }
-            if (maybeFound(bucketOffset, bucketIx, dist)) {
+            if (maybeFound(bucketOffset, bucketIx, meta)) {
                 return
             }
         } while (true)
@@ -342,8 +365,11 @@ open class SimpleHashMapROImpl<K, V>(
         return buffer.getShort(offset + bucketLayout.metaOffset).toInt() and 0xFFFF
     }
 
-    protected fun writeBucketMeta(offset: Int, meta: Int) {
-        buffer.putShort(offset + bucketLayout.metaOffset, meta.toShort())
+    protected fun writeBucketMeta(offset: Int, tag: Int, version: Int) {
+        buffer.putShort(
+                offset + bucketLayout.metaOffset,
+                (tag or (version and SimpleHashMap.VER_TAG_MASK)).toShort()
+        )
     }
 
     protected fun writeBucketData(offset: Int, key: K, value: V) {
@@ -365,6 +391,8 @@ open class SimpleHashMapROImpl<K, V>(
     protected fun isBucketOccupied(meta: Int) = (meta and SimpleHashMap.META_OCCUPIED) != 0
 
     protected fun isBucketTombstoned(meta: Int) = (meta and SimpleHashMap.META_TOMBSTONE) != 0
+
+    protected fun bucketVersion(meta: Int) = meta and SimpleHashMap.VER_TAG_MASK
 }
 
 class SimpleHashMapImpl<K, V> (
@@ -393,7 +421,7 @@ class SimpleHashMapImpl<K, V> (
                         }
                     }
                 },
-                notFound = { bucketOffset, tombstoneOffset, _ ->
+                notFound = { bucketOffset, tombstoneOffset, meta ->
 //                    println("> notFound($bucketOffset)")
 //                    if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
 //                        return PutResult.OVERFLOW
@@ -403,11 +431,11 @@ class SimpleHashMapImpl<K, V> (
                     }
                     if (tombstoneOffset < 0) {
                         writeBucketData(bucketOffset, key, value)
-                        writeBucketMeta(bucketOffset, SimpleHashMap.META_OCCUPIED)
+                        writeBucketMeta(bucketOffset, SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
                         writeSize(size() + 1)
                     } else {
                         writeBucketData(tombstoneOffset, key, value)
-                        writeBucketMeta(tombstoneOffset, SimpleHashMap.META_OCCUPIED)
+                        writeBucketMeta(tombstoneOffset, SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
                         writeTombstones(tombstones - 1)
                         writeSize(size() + 1)
                     }
@@ -421,7 +449,7 @@ class SimpleHashMapImpl<K, V> (
 //        println(">>> remove($key)")
         find(
                 hash,
-                maybeFound = { bucketOffset, bucketIx, _ ->
+                maybeFound = { bucketOffset, bucketIx, meta ->
                     when (key) {
                         bucketLayout.readKey(buffer, bucketOffset) -> {
                             val nextBucketIx = nextBucketIx(bucketIx)
@@ -429,11 +457,11 @@ class SimpleHashMapImpl<K, V> (
                             val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
                             val nextMeta = readBucketMeta(nextBucketOffset)
                             if (isBucketEmpty(nextMeta)) {
-                                writeBucketMeta(bucketOffset, SimpleHashMap.META_FREE)
+                                writeBucketMeta(bucketOffset, SimpleHashMap.META_FREE, bucketVersion(meta) + 1)
                                 writeTombstones(tombstones - cleanupTombstones(bucketIx))
                                 writeSize(size() - 1)
                             } else {
-                                writeBucketMeta(bucketOffset, SimpleHashMap.META_TOMBSTONE)
+                                writeBucketMeta(bucketOffset, SimpleHashMap.META_TOMBSTONE, bucketVersion(meta) + 1)
                                 writeTombstones(tombstones + 1)
                                 writeSize(size() - 1)
                             }
@@ -462,7 +490,7 @@ class SimpleHashMapImpl<K, V> (
             if (!isBucketTombstoned(meta)) {
                 break
             }
-            writeBucketMeta(prevBucketOffset, SimpleHashMap.META_FREE)
+            writeBucketMeta(prevBucketOffset, SimpleHashMap.META_FREE, bucketVersion(meta))
             cleaned++
             curBucketIx = prevBucketIx
         }
