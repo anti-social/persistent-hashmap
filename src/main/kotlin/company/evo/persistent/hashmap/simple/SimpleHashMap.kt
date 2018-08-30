@@ -305,7 +305,6 @@ open class SimpleHashMapROImpl<K, V>(
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
-//            println("    meta: $meta")
             if (isBucketTombstoned(meta)) {
                 firstTombstoneBucketOffset = bucketOffset
                 continue
@@ -321,7 +320,8 @@ open class SimpleHashMapROImpl<K, V>(
     }
 
     protected fun getBucketIx(hash: Int, dist: Int): Int {
-        return (hash + dist) % header.capacity
+        val h = (hash + dist) and Int.MAX_VALUE
+        return  h % header.capacity
     }
 
     protected fun nextBucketIx(bucketIx: Int): Int {
@@ -393,7 +393,7 @@ class SimpleHashMapImpl<K, V> (
                         }
                     }
                 },
-                notFound = { bucketOffset, tombstoneOffset, dist ->
+                notFound = { bucketOffset, tombstoneOffset, _ ->
 //                    println("> notFound($bucketOffset)")
 //                    if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
 //                        return PutResult.OVERFLOW
