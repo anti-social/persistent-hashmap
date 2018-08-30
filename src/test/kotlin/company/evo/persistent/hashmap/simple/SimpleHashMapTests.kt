@@ -1,14 +1,21 @@
 package company.evo.persistent.hashmap.simple
 
+import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
 
 import java.nio.ByteBuffer
 import java.util.*
+import kotlin.coroutines.experimental.buildSequence
 
 class SimpleHashMapTests : StringSpec() {
+    private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
+    private val random = Random(seed)
+
     init {
-        "test overflow".config(enabled = false) {
+        println("The seed for <$this> test cases is: $seed")
+
+        "test overflow" {
             val map = createMap<Int, Float>(5)
 
             map.maxEntries shouldBe 5
@@ -30,24 +37,31 @@ class SimpleHashMapTests : StringSpec() {
             map.size() shouldBe 5
 
             map.remove(4) shouldBe true
+            map.tombstones shouldBe 1
+            map.size() shouldBe 4
+
             map.remove(5) shouldBe true
-            map.tombstones shouldBe 2
+            map.tombstones shouldBe 0
+            map.size() shouldBe 3
+
+            map.remove(5) shouldBe false
+            map.tombstones shouldBe 0
             map.size() shouldBe 3
 
             map.put(6, 1.6F) shouldBe PutResult.OK
-            map.tombstones shouldBe 2
+            map.tombstones shouldBe 0
             map.size() shouldBe 4
 
             map.put(11, 1.11F) shouldBe PutResult.OK
-            map.tombstones shouldBe 1
+            map.tombstones shouldBe 0
             map.size() shouldBe 5
 
             map.put(7, 1.7F) shouldBe PutResult.OVERFLOW
-            map.tombstones shouldBe 1
+            map.tombstones shouldBe 0
             map.size() shouldBe 5
 
             map.put(6, 1.66F) shouldBe PutResult.OK
-            map.tombstones shouldBe 1
+            map.tombstones shouldBe 0
             map.size() shouldBe 5
 
             map.get(1, 0.0F) shouldBe 1.1F
@@ -57,44 +71,122 @@ class SimpleHashMapTests : StringSpec() {
             map.get(6, 0.0F) shouldBe 1.66F
         }
 
+        "skip tombstone when putting existing key" {
+            val map = createMap<Int, Float>(5)
+            map.capacity shouldBe 7
+
+            map.put(0, 1.0F)
+            map.put(7, 1.7F)
+            map.remove(0)
+            map.put(7, 7.0F)
+            map.tombstones shouldBe 1
+            map.size() shouldBe 1
+        }
+
+        "no tombstone when removing last record in chain" {
+            val map = createMap<Int, Float>(5)
+            map.capacity shouldBe 7
+
+            map.put(0, 1.0F)
+            map.remove(0)
+            map.tombstones shouldBe 0
+            map.size() shouldBe 0
+        }
+
+        "cleanup tombstones when removing last record in chain" {
+            val map = createMap<Int, Float>(5)
+            map.capacity shouldBe 7
+
+            map.put(0, 1.0F)
+            map.put(1, 1.1F)
+            map.put(2, 1.2F)
+            map.tombstones shouldBe 0
+            map.size() shouldBe 3
+
+            map.remove(0)
+            map.tombstones shouldBe 1
+            map.size() shouldBe 2
+
+            map.remove(1)
+            map.tombstones shouldBe 2
+            map.size() shouldBe 1
+
+            map.remove(2)
+            map.tombstones shouldBe 0
+            map.size() shouldBe 0
+        }
+
         "put and remove a little random entries, then get them all" {
-            val limit = 100
-            val maxKey = limit * 2
-            testRandomPutRemove(limit, maxKey, 163)
+            testRandomPutRemove(12, 17)
+        }
+
+        "put and remove some random entries, then get them all".config(invocations = 100) {
+            testRandomPutRemove(100, 163)
         }
 
         "put and remove a bunch of random entries, then get them all" {
-            val limit = 1_000_000
-            val maxKey = limit * 5
-            testRandomPutRemove(limit, maxKey, 1395263)
+            testRandomPutRemove(1_000_000, 1395263)
         }
     }
 
     private fun testRandomPutRemove(
-            limit: Int, maxKey: Int, expectedCapacity: Int,
+            limit: Int, expectedCapacity: Int,
             generateTestCaseCode: Boolean = false
     ) {
         val entries = hashMapOf<Int, Float>()
 
         if (generateTestCaseCode) {
+            println("// Generate data")
             println("val map = createMap<Int, Float>($limit)")
         }
         val map = createMap<Int, Float>(limit)
         map.maxEntries shouldBe limit
         map.capacity shouldBe expectedCapacity
 
-        val keys = RANDOM
-                .ints(-maxKey, maxKey)
-                .limit(limit.toLong())
-        keys.forEach { k ->
-            if (RANDOM.nextInt(4) == 3) {
-                entries.remove(k)
-                if (generateTestCaseCode) {
-                    println("map.remove($k) shouldBe true")
+        val keysGen = object : Gen<Int> {
+            val keysStream = random.ints(0, limit / 2)
+            var collisionCandidate = Int.MIN_VALUE
+            var removeCandidate = Int.MIN_VALUE
+
+            override fun constants(): Iterable<Int> = emptyList()
+
+            override fun random(): Sequence<Int> = buildSequence {
+                for (v in keysStream) {
+                    removeCandidate = when {
+                        random.nextInt(3) == 0 -> {
+                            // Generate collisions
+                            val k = random.nextInt(limit * 10)
+                            val ix = collisionCandidate % expectedCapacity
+                            val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
+                            yield(collidedValue)
+                            collidedValue
+
+                        }
+                        random.nextInt(4) == 0 -> {
+                            yield(-removeCandidate)
+                            collisionCandidate
+                        }
+                        else -> {
+                            yield(v)
+                            v
+                        }
+                    }
+                    if (random.nextInt(10) == 0 || collisionCandidate == Int.MIN_VALUE) {
+                        collisionCandidate = v
+                    }
                 }
-                map.remove(k) shouldBe true
+            }
+        }
+        keysGen.random().take(limit).forEach { k ->
+            if (k < 0) {
+                val removeKey = -k
+                val removeRes = entries.remove(removeKey) != null
+                if (generateTestCaseCode) {
+                    println("map.remove($removeKey) shouldBe $removeRes")
+                }
+                map.remove(removeKey) shouldBe removeRes
             } else {
-                val v = RANDOM.nextFloat()
+                val v = random.nextFloat()
                 entries.put(k, v)
                 if (generateTestCaseCode) {
                     println("map.put($k, ${v}F) shouldBe PutResult.OK")
@@ -104,11 +196,14 @@ class SimpleHashMapTests : StringSpec() {
         }
 
         if (generateTestCaseCode) {
-            println()
+            println("// Assertions")
         }
 
+        if (generateTestCaseCode) {
+            println("map.size() shouldBe ${entries.size}")
+        }
         map.size() shouldBe entries.size
-        (-maxKey..maxKey).forEach { k ->
+        (0..limit).forEach { k ->
             val expectedValue = entries[k]
             val v = map.get(k, Float.MIN_VALUE)
             if (generateTestCaseCode) {
@@ -119,8 +214,6 @@ class SimpleHashMapTests : StringSpec() {
     }
 
     companion object {
-        private val RANDOM = Random()
-
         private inline fun <reified K, reified V> createMap(
                 maxEntries: Int, loadFactor: Double = 0.75
         ): SimpleHashMap<K, V> {

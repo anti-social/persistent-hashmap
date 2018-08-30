@@ -52,6 +52,10 @@ kotlin {
 }
 
 val test by tasks.getting(Test::class) {
+    // project.properties.subMap(["foo", "bar"])
+    properties["seed"]?.let {
+        systemProperties["test.random.seed"] = it
+    }
     useJUnitPlatform()
 }
 
