@@ -72,7 +72,7 @@ jmh {
         include = it.split(',')
     }
 
-    warmupIterations = 2
+    warmupIterations = 1
     fork = 1
     iterations = 4
     timeOnIteration = "1s"

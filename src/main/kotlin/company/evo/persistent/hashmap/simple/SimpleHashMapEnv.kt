@@ -15,7 +15,8 @@ import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
 abstract class SimpleHashMapBaseEnv(
-        protected val dir: VersionedDirectory
+        protected val dir: VersionedDirectory,
+        val collectStats: Boolean
 ) : AutoCloseable
 {
     companion object {
@@ -30,8 +31,9 @@ abstract class SimpleHashMapBaseEnv(
 
 class SimpleHashMapROEnv<K, V> (
         dir: VersionedDirectory,
-        val bucketLayout: BucketLayout<K, V>
-) : SimpleHashMapBaseEnv(dir) {
+        val bucketLayout: BucketLayout<K, V>,
+        collectStats: Boolean
+) : SimpleHashMapBaseEnv(dir, collectStats) {
 
     private val lock = ReentrantLock()
 
@@ -88,8 +90,9 @@ class SimpleHashMapROEnv<K, V> (
 class SimpleHashMapEnv<K, V> private constructor(
         dir: VersionedDirectory,
         val bucketLayout: BucketLayout<K, V>,
-        val loadFactor: Double
-) : SimpleHashMapBaseEnv(dir) {
+        val loadFactor: Double,
+        collectStats: Boolean
+) : SimpleHashMapBaseEnv(dir, collectStats) {
     class Builder<K, V>(keyClass: Class<K>, valueClass: Class<V>) {
         private val keySerializer: Serializer<K> = Serializer.getForClass(keyClass)
         private val valueSerializer: Serializer<V> = Serializer.getForClass(valueClass)
@@ -126,6 +129,11 @@ class SimpleHashMapEnv<K, V> private constructor(
             this.loadFactor = loadFactor
         }
 
+        var collectStats: Boolean = false
+        fun collectStats(collectStats: Boolean) = apply {
+            this.collectStats = collectStats
+        }
+
         fun open(path: Path): SimpleHashMapEnv<K, V> {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             return if (dir.created) {
@@ -137,7 +145,7 @@ class SimpleHashMapEnv<K, V> private constructor(
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
-            return SimpleHashMapROEnv(dir, bucketLayout)
+            return SimpleHashMapROEnv(dir, bucketLayout, collectStats)
         }
 
         fun createAnonymousDirect(): SimpleHashMapEnv<K, V> {
@@ -156,11 +164,11 @@ class SimpleHashMapEnv<K, V> private constructor(
             val mapInfo = MapInfo.calcFor(initialEntries, loadFactor, bucketLayout.size)
             val mapBuffer = dir.createFile(filename, mapInfo.bufferSize)
             SimpleHashMap.initBuffer(mapBuffer, bucketLayout, mapInfo)
-            return SimpleHashMapEnv(dir, bucketLayout, loadFactor)
+            return SimpleHashMapEnv(dir, bucketLayout, loadFactor, collectStats)
         }
 
         private fun openWritable(dir: VersionedDirectory): SimpleHashMapEnv<K, V> {
-            return SimpleHashMapEnv(dir, bucketLayout, loadFactor)
+            return SimpleHashMapEnv(dir, bucketLayout, loadFactor, collectStats)
         }
     }
 

@@ -52,6 +52,53 @@ data class MapInfo(
     }
 }
 
+abstract class StatsCollector {
+    var totalGet = 0L
+        protected set
+    var foundGet = 0L
+        protected set
+    var missedGet = 0L
+        protected set
+    var maxGetDistance = 0
+        protected set
+    val avgGetDistance
+        get() = totalGetDistance.toFloat() / totalGet
+
+    protected var totalGetDistance = 0L
+
+    abstract fun addGet(found: Boolean, dist: Int)
+
+    override fun toString(): String {
+        return """
+            |total gets: $totalGet
+            |found gets: $foundGet
+            |missed gets: $missedGet
+            |max get distance: $maxGetDistance
+            |avg get distance: $avgGetDistance
+        """.trimMargin()
+    }
+}
+
+class DummyStatsCollector : StatsCollector() {
+    override fun addGet(found: Boolean, dist: Int) {}
+}
+
+class StatsCollectorImpl : StatsCollector() {
+    override fun addGet(found: Boolean, dist: Int) {
+        totalGet++
+        if (found) {
+            foundGet++
+        } else {
+            missedGet++
+        }
+        totalGetDistance += dist
+        if (dist > maxGetDistance) {
+            maxGetDistance = dist
+        }
+    }
+
+}
+
 interface SimpleHashMapRO<K, V> {
     val version: Long
     val maxEntries: Int
@@ -62,12 +109,15 @@ interface SimpleHashMapRO<K, V> {
     fun get(key: K, defaultValue: V): V
     fun size(): Int
 
+    fun stats(): StatsCollector
+
     companion object {
         fun <K, V> fromEnv(env: SimpleHashMapROEnv<K, V>, buffer: ByteBuffer): SimpleHashMapRO<K, V> {
             return SimpleHashMapROImpl(
                     env.getCurrentVersion(),
                     buffer,
-                    env.bucketLayout
+                    env.bucketLayout,
+                    if (env.collectStats) StatsCollectorImpl() else DummyStatsCollector()
             )
         }
     }
@@ -219,10 +269,12 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
     }
 }
 
-open class SimpleHashMapROImpl<K, V>(
+open class SimpleHashMapROImpl<K, V>
+@JvmOverloads constructor(
         override val version: Long,
         protected val buffer: ByteBuffer,
-        protected val bucketLayout: BucketLayout<K, V>
+        protected val bucketLayout: BucketLayout<K, V>,
+        protected val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO<K, V> {
 
     protected val keySerializer = bucketLayout.keySerializer
@@ -244,6 +296,7 @@ open class SimpleHashMapROImpl<K, V>(
         get() = readTombstones()
     override fun size() = buffer.getInt(SimpleHashMap.Header.SIZE_OFFSET)
 
+    override fun stats() = statsCollector
 
     override fun toString(): String {
         val indexPad = capacity.toString().length
@@ -277,7 +330,7 @@ open class SimpleHashMapROImpl<K, V>(
         val hash = keySerializer.hash(key)
         find(
                 hash,
-                maybeFound = { bucketOffset, _, meta ->
+                maybeFound = { bucketOffset, _, meta, dist ->
 //                    when (key) {
 //                        bucketLayout.readKey(buffer, bucketOffset) -> {
 //                            return bucketLayout.readValue(buffer, bucketOffset)
@@ -306,9 +359,11 @@ open class SimpleHashMapROImpl<K, V>(
                             return@find false
                         }
                     }
+                    statsCollector.addGet(true, dist)
                     return value
                 },
-                notFound = { _, _, _ ->
+                notFound = { _, _, _, dist ->
+                    statsCollector.addGet(false, dist)
                     return defaultValue
                 }
         )
@@ -317,8 +372,8 @@ open class SimpleHashMapROImpl<K, V>(
 
     protected inline fun find(
             hash: Int,
-            maybeFound: (offset: Int, bucketIx: Int, meta: Int) -> Boolean,
-            notFound: (offset: Int, tombstoneOffset: Int, meta: Int) -> Unit
+            maybeFound: (offset: Int, bucketIx: Int, meta: Int, dist: Int) -> Boolean,
+            notFound: (offset: Int, tombstoneOffset: Int, meta: Int, dist: Int) -> Unit
     ) {
         var dist = -1
         var firstTombstoneBucketOffset = -1
@@ -333,10 +388,10 @@ open class SimpleHashMapROImpl<K, V>(
                 continue
             }
             if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
-                notFound(bucketOffset, firstTombstoneBucketOffset, meta)
+                notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
                 return
             }
-            if (maybeFound(bucketOffset, bucketIx, meta)) {
+            if (maybeFound(bucketOffset, bucketIx, meta, dist)) {
                 return
             }
         } while (true)
@@ -395,21 +450,24 @@ open class SimpleHashMapROImpl<K, V>(
     protected fun bucketVersion(meta: Int) = meta and SimpleHashMap.VER_TAG_MASK
 }
 
-class SimpleHashMapImpl<K, V> (
+class SimpleHashMapImpl<K, V>
+@JvmOverloads constructor(
         version: Long,
         buffer: ByteBuffer,
-        bucketLayout: BucketLayout<K, V>
+        bucketLayout: BucketLayout<K, V>,
+        statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMap<K, V>, SimpleHashMapROImpl<K, V>(
         version,
         buffer,
-        bucketLayout
+        bucketLayout,
+        statsCollector
 ) {
     override fun put(key: K, value: V): PutResult {
         val hash = keySerializer.hash(key)
 //        println(">>> put($key, $value)")
         find(
                 hash,
-                maybeFound = { bucketOffset, _, _ ->
+                maybeFound = { bucketOffset, _, _, _ ->
                     when (key) {
                         bucketLayout.readKey(buffer, bucketOffset) -> {
 //                            println("  keys are equal")
@@ -421,7 +479,7 @@ class SimpleHashMapImpl<K, V> (
                         }
                     }
                 },
-                notFound = { bucketOffset, tombstoneOffset, meta ->
+                notFound = { bucketOffset, tombstoneOffset, meta, _ ->
 //                    println("> notFound($bucketOffset)")
 //                    if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
 //                        return PutResult.OVERFLOW
@@ -449,7 +507,7 @@ class SimpleHashMapImpl<K, V> (
 //        println(">>> remove($key)")
         find(
                 hash,
-                maybeFound = { bucketOffset, bucketIx, meta ->
+                maybeFound = { bucketOffset, bucketIx, meta, _ ->
                     when (key) {
                         bucketLayout.readKey(buffer, bucketOffset) -> {
                             val nextBucketIx = nextBucketIx(bucketIx)
@@ -472,7 +530,7 @@ class SimpleHashMapImpl<K, V> (
                         }
                     }
                 },
-                notFound = { _, _, _ ->
+                notFound = { _, _, _, _ ->
                     return false
                 }
         )
