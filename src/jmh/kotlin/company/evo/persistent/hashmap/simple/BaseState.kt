@@ -36,6 +36,7 @@ open class BaseState {
     }
 
 //    @Param("100000", "1000000", "10000000", "20000000")
-    @Param("100000")
+//    @Param("100000")
+    @Param("20000000")
     protected var entries: Int = 0
 }

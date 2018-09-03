@@ -7,11 +7,11 @@ import java.nio.ByteBuffer
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
     open class SimpleHashMapState : BaseState() {
-        lateinit var map: SimpleHashMapImpl<Int, Float>
+        lateinit var map: SimpleHashMapImpl
 
         @Setup(Level.Trial)
         fun initMap() {
-            val bucketLayout = SimpleHashMap.bucketLayout<Int, Float>()
+            val bucketLayout = SimpleHashMap.bucketLayout()
             val mapInfo = MapInfo.calcFor(entries, 0.5, bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
             SimpleHashMap.initBuffer(buffer, bucketLayout, mapInfo)

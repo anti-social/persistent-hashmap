@@ -31,7 +31,7 @@ abstract class SimpleHashMapBaseEnv(
 
 class SimpleHashMapROEnv<K, V> (
         dir: VersionedDirectory,
-        val bucketLayout: BucketLayout<K, V>,
+        val bucketLayout: BucketLayout,
         collectStats: Boolean
 ) : SimpleHashMapBaseEnv(dir, collectStats) {
 
@@ -43,7 +43,7 @@ class SimpleHashMapROEnv<K, V> (
     @Volatile
     private var curBuffer: ByteBuffer = dir.openFileReadOnly(getHashmapFilename(dir.readVersion()))
 
-    fun currentMap(): SimpleHashMapRO<K, V> {
+    fun currentMap(): SimpleHashMapRO {
         var ver = dir.readVersion()
         var i = 0
         while (ver != curVersion) {
@@ -89,14 +89,14 @@ class SimpleHashMapROEnv<K, V> (
 
 class SimpleHashMapEnv<K, V> private constructor(
         dir: VersionedDirectory,
-        val bucketLayout: BucketLayout<K, V>,
+        val bucketLayout: BucketLayout,
         val loadFactor: Double,
         collectStats: Boolean
 ) : SimpleHashMapBaseEnv(dir, collectStats) {
     class Builder<K, V>(keyClass: Class<K>, valueClass: Class<V>) {
         private val keySerializer: Serializer<K> = Serializer.getForClass(keyClass)
         private val valueSerializer: Serializer<V> = Serializer.getForClass(valueClass)
-        private val bucketLayout = BucketLayout(keySerializer, valueSerializer, SimpleHashMap.META_SIZE)
+        private val bucketLayout = BucketLayout(SimpleHashMap.META_SIZE, 4, 4)
 
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
@@ -172,13 +172,13 @@ class SimpleHashMapEnv<K, V> private constructor(
         }
     }
 
-    fun openMap(): SimpleHashMap<K, V> {
+    fun openMap(): SimpleHashMap {
         val ver = getCurrentVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
         return SimpleHashMap.fromEnv(this, mapBuffer)
     }
 
-    fun copyMap(map: SimpleHashMap<K, V>): SimpleHashMap<K, V> {
+    fun copyMap(map: SimpleHashMap): SimpleHashMap {
         val newVersion = map.version + 1
         val newMaxEntries = map.maxEntries * 2
         val mapInfo = MapInfo.calcFor(newMaxEntries, loadFactor, bucketLayout.size)

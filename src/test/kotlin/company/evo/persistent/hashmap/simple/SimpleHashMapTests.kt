@@ -216,8 +216,8 @@ class SimpleHashMapTests : StringSpec() {
     companion object {
         private inline fun <reified K, reified V> createMap(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap<K, V> {
-            val bucketLayout = SimpleHashMap.bucketLayout<K, V>()
+        ): SimpleHashMap {
+            val bucketLayout = SimpleHashMap.bucketLayout()
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             SimpleHashMap.initBuffer(buffer, bucketLayout, mapInfo)

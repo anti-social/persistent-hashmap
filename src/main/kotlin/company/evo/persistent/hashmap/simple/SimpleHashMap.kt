@@ -1,14 +1,6 @@
 package company.evo.persistent.hashmap.simple
 
-import company.evo.persistent.hashmap.BucketLayout
-import company.evo.persistent.hashmap.FloatSerializer
-import company.evo.persistent.hashmap.IntSerializer
-import company.evo.persistent.hashmap.PAGE_SIZE
-import company.evo.persistent.hashmap.PRIMES
-import company.evo.persistent.hashmap.Serializer
-import company.evo.persistent.hashmap.UnsafeFloatSerializer
-import company.evo.persistent.hashmap.UnsafeIntSerializer
-import company.evo.persistent.hashmap.UnsafeShortSerializer
+import company.evo.persistent.hashmap.*
 
 import java.nio.ByteBuffer
 
@@ -104,12 +96,12 @@ class StatsCollectorImpl : StatsCollector() {
 
 }
 
-interface SimpleHashMapRO<K, V> {
+interface SimpleHashMapRO {
     val version: Long
     val maxEntries: Int
     val capacity: Int
     val tombstones: Int
-    val header: SimpleHashMap.Header<K, V>
+    val header: SimpleHashMap.Header
 
     fun get(key: Int, defaultValue: Float): Float
     fun size(): Int
@@ -117,7 +109,7 @@ interface SimpleHashMapRO<K, V> {
     fun stats(): StatsCollector
 
     companion object {
-        fun <K, V> fromEnv(env: SimpleHashMapROEnv<K, V>, buffer: ByteBuffer): SimpleHashMapRO<K, V> {
+        fun <K, V> fromEnv(env: SimpleHashMapROEnv<K, V>, buffer: ByteBuffer): SimpleHashMapRO {
             return SimpleHashMapROImpl(
                     env.getCurrentVersion(),
                     buffer,
@@ -128,9 +120,9 @@ interface SimpleHashMapRO<K, V> {
     }
 }
 
-interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
-    fun put(key: K, value: V): PutResult
-    fun remove(key: K): Boolean
+interface SimpleHashMap : SimpleHashMapRO {
+    fun put(key: Int, value: Float): PutResult
+    fun remove(key: Int): Boolean
 
     companion object {
         const val DATA_PAGE_HEADER_SIZE = 16
@@ -145,16 +137,16 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
         const val VER_TAG_BITS = 14
         const val VER_TAG_MASK = (1 shl VER_TAG_BITS) - 1
 
-        fun <K, V> initBuffer(
+        fun initBuffer(
                 buffer: ByteBuffer,
-                bucketLayout: BucketLayout<K, V>,
+                bucketLayout: BucketLayout,
                 mapInfo: MapInfo
         ) {
             val header = SimpleHashMap.Header(bucketLayout, mapInfo.capacity, mapInfo.maxEntries)
             header.dump(buffer)
         }
 
-        fun <K, V> fromEnv(env: SimpleHashMapEnv<K, V>, buffer: ByteBuffer): SimpleHashMap<K, V> {
+        fun <K, V> fromEnv(env: SimpleHashMapEnv<K, V>, buffer: ByteBuffer): SimpleHashMap {
             return SimpleHashMapImpl(
                     env.getCurrentVersion(),
                     buffer,
@@ -162,17 +154,17 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
             )
         }
 
-        fun <K, V> bucketLayout(keyClass: Class<K>, valueClass: Class<V>): BucketLayout<K, V> {
-            return BucketLayout(keyClass, valueClass, META_SIZE)
-        }
+//        fun <K, V> bucketLayout(keyClass: Class<K>, valueClass: Class<V>): BucketLayout<K, V> {
+//            return BucketLayout(keyClass, valueClass, META_SIZE)
+//        }
 
-        inline fun <reified K, reified V> bucketLayout(): BucketLayout<K, V> {
-            return BucketLayout(META_SIZE)
+        fun bucketLayout(): BucketLayout {
+            return BucketLayout(META_SIZE, 4, 4)
         }
     }
 
-    class Header<K, V>(
-            val bucketLayout: BucketLayout<K, V>,
+    class Header(
+            val bucketLayout: BucketLayout,
             val capacity: Int,
             val maxEntries: Int,
             val size: Int = 0,
@@ -192,7 +184,7 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
             private const val KEY_TYPE_SHIFT = 0
             private const val VALUE_TYPE_SHIFT = 3
 
-            fun <K, V> load(buffer: ByteBuffer, bucketLayout: BucketLayout<K, V>): Header<K, V> {
+            fun load(buffer: ByteBuffer, bucketLayout: BucketLayout): Header {
                 buffer.position(0)
                 val magic = ByteArray(MAGIC.size)
                 buffer.get(magic, 0, MAGIC.size)
@@ -203,18 +195,18 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
                     )
                 }
                 val flags = buffer.getLong(FLAGS_OFFSET)
-                (getKeySerial(flags) to bucketLayout.keySerializer.serial).let {
-                    (serial, expectedSerial) ->
-                    assert(serial == expectedSerial) {
-                        "Mismatch key type serial: expected $expectedSerial but was $serial"
-                    }
-                }
-                (getValueSerial(flags) to bucketLayout.valueSerializer.serial).let {
-                    (serial, expectedSerial) ->
-                    assert(serial == expectedSerial) {
-                        "Mismatch value type serial: expected $expectedSerial but was $serial"
-                    }
-                }
+//                (getKeySerial(flags) to bucketLayout.keySerializer.serial).let {
+//                    (serial, expectedSerial) ->
+//                    assert(serial == expectedSerial) {
+//                        "Mismatch key type serial: expected $expectedSerial but was $serial"
+//                    }
+//                }
+//                (getValueSerial(flags) to bucketLayout.valueSerializer.serial).let {
+//                    (serial, expectedSerial) ->
+//                    assert(serial == expectedSerial) {
+//                        "Mismatch value type serial: expected $expectedSerial but was $serial"
+//                    }
+//                }
                 val capacity = toIntOrFail(buffer.getLong(CAPACITY_OFFSET), "capacity")
                 val maxEntries = toIntOrFail(buffer.getLong(MAX_ENTRIES_OFFSET), "initialEntries")
                 val size = toIntOrFail(buffer.getLong(SIZE_OFFSET), "size")
@@ -256,7 +248,7 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
         fun dump(buffer: ByteBuffer) {
             buffer.position(0)
             buffer.put(MAGIC, 0, MAGIC.size)
-            buffer.putLong(FLAGS_OFFSET, calcFlags(bucketLayout.keySerializer, bucketLayout.valueSerializer))
+//            buffer.putLong(FLAGS_OFFSET, calcFlags(bucketLayout.keySerializer, bucketLayout.valueSerializer))
             buffer.putLong(CAPACITY_OFFSET, capacity.toLong())
             buffer.putLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
             buffer.putLong(SIZE_OFFSET, size.toLong())
@@ -274,23 +266,25 @@ interface SimpleHashMap<K, V> : SimpleHashMapRO<K, V> {
     }
 }
 
-open class SimpleHashMapROImpl<K, V>
+open class SimpleHashMapROImpl
 @JvmOverloads constructor(
         override val version: Long,
         protected val buffer: ByteBuffer,
-        protected val bucketLayout: BucketLayout<K, V>,
+        protected val bucketLayout: BucketLayout,
         protected val statsCollector: StatsCollector = DummyStatsCollector()
-) : SimpleHashMapRO<K, V> {
+) : SimpleHashMapRO {
 
-    protected val keySerializer = bucketLayout.keySerializer
-    protected val intKeySerializer = IntSerializer()
-    protected val valueSerializer = bucketLayout.valueSerializer
-    protected val floatValueSerializer = FloatSerializer()
+//    protected val keySerializer = bucketLayout.keySerializer
+//    protected val intKeySerializer = IntSerializer()
+//    protected val valueSerializer = bucketLayout.valueSerializer
+//    protected val floatValueSerializer = FloatSerializer()
+//    val bucketSerializer = ShortIntFloatBucketSerializer(buffer)
+    val bucketSerializer = Unsafe_ShortIntFloatBucketSerializer(buffer)
     val bucketsPerPage = MapInfo.calcBucketsPerPage(bucketLayout.size)
 
-    protected val unsafeMetaSerializer = UnsafeShortSerializer(buffer)
-    protected val unsafeValueSerializer = UnsafeFloatSerializer(buffer)
-    protected val unsafeKeySerializer = UnsafeIntSerializer(buffer)
+//    protected val unsafeMetaSerializer = UnsafeShortSerializer(buffer)
+//    protected val unsafeValueSerializer = UnsafeFloatSerializer(buffer)
+//    protected val unsafeKeySerializer = UnsafeIntSerializer(buffer)
 
     override val header = SimpleHashMap.Header.load(buffer, bucketLayout)
 
@@ -311,13 +305,18 @@ open class SimpleHashMapROImpl<K, V>
 
     override fun toString(): String {
         val indexPad = capacity.toString().length
+        val rawKey = ByteArray(bucketLayout.keySize)
+        val rawValue = ByteArray(bucketLayout.valueSize)
         val dump = (0 until capacity).joinToString("\n") { bucketIx ->
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
+            bucketSerializer.offset = bucketOffset
+            bucketSerializer.readRawKey(rawKey)
+            bucketSerializer.readRawValue(rawValue)
             "${bucketIx.toString().padEnd(indexPad)}: " +
-                    "${readBucketMeta(bucketOffset)}, " +
-                    "${bucketLayout.readRawKey(buffer, bucketOffset).joinToString(", ", "[", "]")}, " +
-                    "${bucketLayout.readRawValue(buffer, bucketOffset).joinToString(", ", "[", "]")}"
+                    "${readBucketMeta()}, " +
+                    "${rawKey.joinToString(", ", "[", "]")}, " +
+                    "${rawValue.joinToString(", ", "[", "]")}"
         }
         return """Header: $header"
             |Data:
@@ -338,40 +337,37 @@ open class SimpleHashMapROImpl<K, V>
     }
 
     override fun get(key: Int, defaultValue: Float): Float {
-        val hash = intKeySerializer.hash(key)
+        // val hash = intKeySerializer.hash(key)
+        val hash = key
 
-        var dist = -1
-        while(true) {
-            dist++
-            val bucketIx = getBucketIx(hash, dist)
-            val pageOffset = getPageOffset(bucketIx)
-            val bucketOffset = getBucketOffset(pageOffset, bucketIx)
-//            val meta = readBucketMeta(bucketOffset)
-            val meta = unsafeMetaSerializer.read(buffer, bucketOffset + bucketLayout.metaOffset).toInt()
-            if (isBucketTombstoned(meta)) {
-                continue
-            }
-            if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
-//                notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
-//                statsCollector.addGet(false, dist)
-                break
-            }
-            when (key) {
-                unsafeKeySerializer.read(buffer, bucketOffset + bucketLayout.keyOffset) -> {
-                    return unsafeValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
-                }
-                else -> {
-                    return defaultValue
-                }
-            }
-//            if (maybeFound(bucketOffset, bucketIx, meta, dist)) {
+//        var dist = -1
+//        while(true) {
+//            dist++
+//            val bucketIx = getBucketIx(hash, dist)
+//            val pageOffset = getPageOffset(bucketIx)
+//            bucketSerializer.offset = getBucketOffset(pageOffset, bucketIx)
+//            val meta = bucketSerializer.readMeta().toInt()
+//            if (isBucketTombstoned(meta)) {
+//                continue
+//            }
+//            if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
+////                notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
+////                statsCollector.addGet(false, dist)
 //                break
 //            }
-        }
+//            when (key) {
+//                bucketSerializer.readKey() -> {
+//                    return bucketSerializer.readValue()
+//                }
+//                else -> {
+//                    return defaultValue
+//                }
+//            }
+//        }
 
-//        find(
-//                hash,
-//                maybeFound = { bucketOffset, _, meta, dist ->
+        find(
+                hash,
+                maybeFound = { _, meta, dist ->
 //                    when (key) {
 ////                        bucketLayout.readKey(buffer, bucketOffset) -> {
 ////                            return bucketLayout.readValue(buffer, bucketOffset)
@@ -383,43 +379,42 @@ open class SimpleHashMapROImpl<K, V>
 //                            false
 //                        }
 //                    }
-//
-////                    var m = meta
-////                    var value: Float
-////                    while (true) {
-////                        value = when (key) {
-////                            bucketLayout.readKey(buffer, bucketOffset) -> {
-//////                                bucketLayout.readValue(buffer, bucketOffset)
-////                                floatValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
-////                            }
-////                            else -> {
-////                                return@find false
-////                            }
-////                        }
-////                        val meta2 = readBucketMeta(bucketOffset)
-////                        if (m == meta2) {
-////                            break
-////                        }
-////                        m = meta2
-////                        if (isBucketTombstoned(m)) {
-////                            return@find false
-////                        }
-////                    }
-////                    statsCollector.addGet(true, dist)
-////                    return value
-//                },
-//                notFound = { _, _, _, dist ->
-//                    statsCollector.addGet(false, dist)
-//                    return defaultValue
-//                }
-//        )
+
+                    var m = meta
+                    var value: Float
+                    while (true) {
+                        value = when (key) {
+                            bucketSerializer.readKey() -> {
+                                bucketSerializer.readValue()
+                            }
+                            else -> {
+                                return@find false
+                            }
+                        }
+                        val meta2 = readBucketMeta()
+                        if (m == meta2) {
+                            break
+                        }
+                        m = meta2
+                        if (isBucketTombstoned(m)) {
+                            return@find false
+                        }
+                    }
+                    statsCollector.addGet(true, dist)
+                    return value
+                },
+                notFound = { _, _, dist ->
+                    statsCollector.addGet(false, dist)
+                    return defaultValue
+                }
+        )
         return defaultValue
     }
 
     protected inline fun find(
             hash: Int,
-            maybeFound: (offset: Int, bucketIx: Int, meta: Int, dist: Int) -> Boolean,
-            notFound: (offset: Int, tombstoneOffset: Int, meta: Int, dist: Int) -> Unit
+            maybeFound: (bucketIx: Int, meta: Int, dist: Int) -> Boolean,
+            notFound: (tombstoneOffset: Int, meta: Int, dist: Int) -> Unit
     ) {
         var dist = -1
         var firstTombstoneBucketOffset = -1
@@ -427,17 +422,17 @@ open class SimpleHashMapROImpl<K, V>
             dist++
             val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
-            val bucketOffset = getBucketOffset(pageOffset, bucketIx)
-            val meta = readBucketMeta(bucketOffset)
+            bucketSerializer.offset = getBucketOffset(pageOffset, bucketIx)
+            val meta = readBucketMeta()
 //            if (isBucketTombstoned(meta)) {
 //                firstTombstoneBucketOffset = bucketOffset
 //                continue
 //            }
             if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
-                notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
+                notFound(firstTombstoneBucketOffset, meta, dist)
                 return
             }
-            if (maybeFound(bucketOffset, bucketIx, meta, dist)) {
+            if (maybeFound(bucketIx, meta, dist)) {
                 return
             }
         } while (true)
@@ -462,20 +457,19 @@ open class SimpleHashMapROImpl<K, V>
         return bucketIx - 1
     }
 
-    protected fun readBucketMeta(offset: Int): Int {
-        return buffer.getShort(offset + bucketLayout.metaOffset).toInt() and 0xFFFF
+    protected fun readBucketMeta(): Int {
+        return bucketSerializer.readMeta().toInt() and 0xFFFF
     }
 
-    protected fun writeBucketMeta(offset: Int, tag: Int, version: Int) {
-        buffer.putShort(
-                offset + bucketLayout.metaOffset,
+    protected fun writeBucketMeta(tag: Int, version: Int) {
+        bucketSerializer.writeMeta(
                 (tag or (version and SimpleHashMap.VER_TAG_MASK)).toShort()
         )
     }
 
-    protected fun writeBucketData(offset: Int, key: K, value: V) {
-        bucketLayout.writeKey(buffer, offset, key)
-        bucketLayout.writeValue(buffer, offset, value)
+    protected fun writeBucketData(key: Int, value: Float) {
+        bucketSerializer.writeKey(key)
+        bucketSerializer.writeValue(value)
     }
 
     protected fun getPageOffset(bucketIx: Int): Int {
@@ -496,28 +490,29 @@ open class SimpleHashMapROImpl<K, V>
     protected fun bucketVersion(meta: Int) = meta and SimpleHashMap.VER_TAG_MASK
 }
 
-class SimpleHashMapImpl<K, V>
+class SimpleHashMapImpl
 @JvmOverloads constructor(
         version: Long,
         buffer: ByteBuffer,
-        bucketLayout: BucketLayout<K, V>,
+        bucketLayout: BucketLayout,
         statsCollector: StatsCollector = DummyStatsCollector()
-) : SimpleHashMap<K, V>, SimpleHashMapROImpl<K, V>(
+) : SimpleHashMap, SimpleHashMapROImpl(
         version,
         buffer,
         bucketLayout,
         statsCollector
 ) {
-    override fun put(key: K, value: V): PutResult {
-        val hash = keySerializer.hash(key)
+    override fun put(key: Int, value: Float): PutResult {
+//        val hash = keySerializer.hash(key)
 //        println(">>> put($key, $value)")
+        val hash = key
         find(
                 hash,
-                maybeFound = { bucketOffset, _, _, _ ->
+                maybeFound = { _, _, _ ->
                     when (key) {
-                        bucketLayout.readKey(buffer, bucketOffset) -> {
+                        bucketSerializer.readKey() -> {
 //                            println("  keys are equal")
-                            bucketLayout.writeValue(buffer, bucketOffset, value)
+                            bucketSerializer.writeValue(value)
                             true
                         }
                         else -> {
@@ -525,7 +520,7 @@ class SimpleHashMapImpl<K, V>
                         }
                     }
                 },
-                notFound = { bucketOffset, tombstoneOffset, meta, _ ->
+                notFound = { tombstoneOffset, meta, _ ->
 //                    println("> notFound($bucketOffset)")
 //                    if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
 //                        return PutResult.OVERFLOW
@@ -534,12 +529,13 @@ class SimpleHashMapImpl<K, V>
                         return PutResult.OVERFLOW
                     }
                     if (tombstoneOffset < 0) {
-                        writeBucketData(bucketOffset, key, value)
-                        writeBucketMeta(bucketOffset, SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
+                        writeBucketData(key, value)
+                        writeBucketMeta(SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
                         writeSize(size() + 1)
                     } else {
-                        writeBucketData(tombstoneOffset, key, value)
-                        writeBucketMeta(tombstoneOffset, SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
+                        bucketSerializer.offset = tombstoneOffset
+                        writeBucketData(key, value)
+                        writeBucketMeta(SimpleHashMap.META_OCCUPIED, bucketVersion(meta))
                         writeTombstones(tombstones - 1)
                         writeSize(size() + 1)
                     }
@@ -548,24 +544,27 @@ class SimpleHashMapImpl<K, V>
         return PutResult.OK
     }
 
-    override fun remove(key: K): Boolean {
-        val hash = keySerializer.hash(key)
+    override fun remove(key: Int): Boolean {
+//        val hash = keySerializer.hash(key)
 //        println(">>> remove($key)")
+        val hash = key
         find(
                 hash,
-                maybeFound = { bucketOffset, bucketIx, meta, _ ->
+                maybeFound = { bucketIx, meta, _ ->
                     when (key) {
-                        bucketLayout.readKey(buffer, bucketOffset) -> {
+                        bucketSerializer.readKey() -> {
                             val nextBucketIx = nextBucketIx(bucketIx)
                             val nextBucketPageOffset = getPageOffset(nextBucketIx)
-                            val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
-                            val nextMeta = readBucketMeta(nextBucketOffset)
+                            val bucketOffset = bucketSerializer.offset
+                            bucketSerializer.offset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
+                            val nextMeta = readBucketMeta()
+                            bucketSerializer.offset = bucketOffset
                             if (isBucketEmpty(nextMeta)) {
-                                writeBucketMeta(bucketOffset, SimpleHashMap.META_FREE, bucketVersion(meta) + 1)
+                                writeBucketMeta(SimpleHashMap.META_FREE, bucketVersion(meta) + 1)
                                 writeTombstones(tombstones - cleanupTombstones(bucketIx))
                                 writeSize(size() - 1)
                             } else {
-                                writeBucketMeta(bucketOffset, SimpleHashMap.META_TOMBSTONE, bucketVersion(meta) + 1)
+                                writeBucketMeta(SimpleHashMap.META_TOMBSTONE, bucketVersion(meta) + 1)
                                 writeTombstones(tombstones + 1)
                                 writeSize(size() - 1)
                             }
@@ -576,7 +575,7 @@ class SimpleHashMapImpl<K, V>
                         }
                     }
                 },
-                notFound = { _, _, _, _ ->
+                notFound = { _, _, _ ->
                     return false
                 }
         )
@@ -589,12 +588,12 @@ class SimpleHashMapImpl<K, V>
         while (true) {
             val prevBucketIx = prevBucketIx(curBucketIx)
             val pageOffset = getPageOffset(prevBucketIx)
-            val prevBucketOffset = getBucketOffset(pageOffset, prevBucketIx)
-            val meta = readBucketMeta(prevBucketOffset)
+            bucketSerializer.offset = getBucketOffset(pageOffset, prevBucketIx)
+            val meta = readBucketMeta()
             if (!isBucketTombstoned(meta)) {
                 break
             }
-            writeBucketMeta(prevBucketOffset, SimpleHashMap.META_FREE, bucketVersion(meta))
+            writeBucketMeta(SimpleHashMap.META_FREE, bucketVersion(meta))
             cleaned++
             curBucketIx = prevBucketIx
         }
