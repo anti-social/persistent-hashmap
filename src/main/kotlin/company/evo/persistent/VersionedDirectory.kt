@@ -27,6 +27,7 @@ interface VersionedDirectory : Closeable {
     companion object {
         const val VERSION_LENGTH = 8
         val BYTE_ORDER: ByteOrder = ByteOrder.LITTLE_ENDIAN
+        val o = ByteOrder.nativeOrder()
     }
 }
 

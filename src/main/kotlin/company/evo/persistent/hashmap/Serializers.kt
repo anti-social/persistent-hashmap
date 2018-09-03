@@ -1,6 +1,7 @@
 package company.evo.persistent.hashmap
 
 import java.nio.ByteBuffer
+import sun.misc.Unsafe
 
 interface Serializer<T> {
     companion object {
@@ -72,3 +73,58 @@ class DoubleSerializer : Serializer<Double> {
     }
 }
 
+abstract class UnsafeSerializer<T>(buffer: ByteBuffer) {
+    companion object {
+        val UNSAFE: Unsafe
+
+        init {
+            val field = Unsafe::class.java.getDeclaredField("theUnsafe")
+            field.setAccessible(true)
+            UNSAFE = field.get(null) as Unsafe
+        }
+    }
+
+    protected val address: Long
+
+    init {
+        val addressField = java.nio.Buffer::class.java.getDeclaredField("address")
+        addressField.setAccessible(true)
+        address = addressField.getLong(buffer)
+    }
+}
+
+class UnsafeShortSerializer(buffer: ByteBuffer) : UnsafeSerializer<Short>(buffer) {
+//    override val serial = 1L
+//    override val size = 4
+//    override fun hash(v: Short) = v.toInt()
+    fun read(buf: ByteBuffer, offset: Int): Short {
+        return UnsafeSerializer.UNSAFE.getShort(address + offset)
+    }
+    fun write(buf: ByteBuffer, offset: Int, v: Short) {
+        UnsafeSerializer.UNSAFE.putShort(address + offset, v)
+    }
+}
+
+class UnsafeIntSerializer(buffer: ByteBuffer) : UnsafeSerializer<Int>(buffer) {
+//    override val serial = 2L
+//    override val size = 4
+//    override fun hash(v: Int) = v
+    fun read(buf: ByteBuffer, offset: Int): Int {
+        return UnsafeSerializer.UNSAFE.getInt(address + offset)
+    }
+    fun write(buf: ByteBuffer, offset: Int, v: Int) {
+        UnsafeSerializer.UNSAFE.putInt(address + offset, v)
+    }
+}
+
+class UnsafeFloatSerializer(buffer: ByteBuffer) : UnsafeSerializer<Float>(buffer) {
+//    override val serial = 4L
+//    override val size = 4
+//    override fun hash(v: Float) = java.lang.Float.floatToIntBits(v)
+    fun read(buf: ByteBuffer, offset: Int): Float {
+        return UnsafeSerializer.UNSAFE.getFloat(address + offset)
+    }
+    fun write(buf: ByteBuffer, offset: Int, v: Float) {
+        UnsafeSerializer.UNSAFE.putFloat(address + offset, v)
+    }
+}

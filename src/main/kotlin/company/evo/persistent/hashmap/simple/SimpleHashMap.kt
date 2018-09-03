@@ -1,9 +1,14 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.persistent.hashmap.BucketLayout
+import company.evo.persistent.hashmap.FloatSerializer
+import company.evo.persistent.hashmap.IntSerializer
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
+import company.evo.persistent.hashmap.UnsafeFloatSerializer
+import company.evo.persistent.hashmap.UnsafeIntSerializer
+import company.evo.persistent.hashmap.UnsafeShortSerializer
 
 import java.nio.ByteBuffer
 
@@ -106,7 +111,7 @@ interface SimpleHashMapRO<K, V> {
     val tombstones: Int
     val header: SimpleHashMap.Header<K, V>
 
-    fun get(key: K, defaultValue: V): V
+    fun get(key: Int, defaultValue: Float): Float
     fun size(): Int
 
     fun stats(): StatsCollector
@@ -278,8 +283,14 @@ open class SimpleHashMapROImpl<K, V>
 ) : SimpleHashMapRO<K, V> {
 
     protected val keySerializer = bucketLayout.keySerializer
+    protected val intKeySerializer = IntSerializer()
     protected val valueSerializer = bucketLayout.valueSerializer
+    protected val floatValueSerializer = FloatSerializer()
     val bucketsPerPage = MapInfo.calcBucketsPerPage(bucketLayout.size)
+
+    protected val unsafeMetaSerializer = UnsafeShortSerializer(buffer)
+    protected val unsafeValueSerializer = UnsafeFloatSerializer(buffer)
+    protected val unsafeKeySerializer = UnsafeIntSerializer(buffer)
 
     override val header = SimpleHashMap.Header.load(buffer, bucketLayout)
 
@@ -326,47 +337,82 @@ open class SimpleHashMapROImpl<K, V>
         buffer.putInt(SimpleHashMap.Header.TOMBSTONES_OFFSET, tombstones)
     }
 
-    override fun get(key: K, defaultValue: V): V {
-        val hash = keySerializer.hash(key)
-        find(
-                hash,
-                maybeFound = { bucketOffset, _, meta, dist ->
+    override fun get(key: Int, defaultValue: Float): Float {
+        val hash = intKeySerializer.hash(key)
+
+        var dist = -1
+        while(true) {
+            dist++
+            val bucketIx = getBucketIx(hash, dist)
+            val pageOffset = getPageOffset(bucketIx)
+            val bucketOffset = getBucketOffset(pageOffset, bucketIx)
+//            val meta = readBucketMeta(bucketOffset)
+            val meta = unsafeMetaSerializer.read(buffer, bucketOffset + bucketLayout.metaOffset).toInt()
+            if (isBucketTombstoned(meta)) {
+                continue
+            }
+            if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
+//                notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
+//                statsCollector.addGet(false, dist)
+                break
+            }
+            when (key) {
+                unsafeKeySerializer.read(buffer, bucketOffset + bucketLayout.keyOffset) -> {
+                    return unsafeValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
+                }
+                else -> {
+                    return defaultValue
+                }
+            }
+//            if (maybeFound(bucketOffset, bucketIx, meta, dist)) {
+//                break
+//            }
+        }
+
+//        find(
+//                hash,
+//                maybeFound = { bucketOffset, _, meta, dist ->
 //                    when (key) {
-//                        bucketLayout.readKey(buffer, bucketOffset) -> {
-//                            return bucketLayout.readValue(buffer, bucketOffset)
+////                        bucketLayout.readKey(buffer, bucketOffset) -> {
+////                            return bucketLayout.readValue(buffer, bucketOffset)
+////                        }
+//                        intKeySerializer.read(buffer, bucketOffset + bucketLayout.keyOffset) -> {
+//                            return floatValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
 //                        }
 //                        else -> {
 //                            false
 //                        }
 //                    }
-                    var m = meta
-                    var value: V
-                    while (true) {
-                        value = when (key) {
-                            bucketLayout.readKey(buffer, bucketOffset) -> {
-                                bucketLayout.readValue(buffer, bucketOffset)
-                            }
-                            else -> {
-                                return@find false
-                            }
-                        }
-                        val meta2 = readBucketMeta(bucketOffset)
-                        if (m == meta2) {
-                            break
-                        }
-                        m = meta2
-                        if (isBucketTombstoned(m)) {
-                            return@find false
-                        }
-                    }
-                    statsCollector.addGet(true, dist)
-                    return value
-                },
-                notFound = { _, _, _, dist ->
-                    statsCollector.addGet(false, dist)
-                    return defaultValue
-                }
-        )
+//
+////                    var m = meta
+////                    var value: Float
+////                    while (true) {
+////                        value = when (key) {
+////                            bucketLayout.readKey(buffer, bucketOffset) -> {
+//////                                bucketLayout.readValue(buffer, bucketOffset)
+////                                floatValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
+////                            }
+////                            else -> {
+////                                return@find false
+////                            }
+////                        }
+////                        val meta2 = readBucketMeta(bucketOffset)
+////                        if (m == meta2) {
+////                            break
+////                        }
+////                        m = meta2
+////                        if (isBucketTombstoned(m)) {
+////                            return@find false
+////                        }
+////                    }
+////                    statsCollector.addGet(true, dist)
+////                    return value
+//                },
+//                notFound = { _, _, _, dist ->
+//                    statsCollector.addGet(false, dist)
+//                    return defaultValue
+//                }
+//        )
         return defaultValue
     }
 
@@ -383,10 +429,10 @@ open class SimpleHashMapROImpl<K, V>
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
-            if (isBucketTombstoned(meta)) {
-                firstTombstoneBucketOffset = bucketOffset
-                continue
-            }
+//            if (isBucketTombstoned(meta)) {
+//                firstTombstoneBucketOffset = bucketOffset
+//                continue
+//            }
             if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
                 notFound(bucketOffset, firstTombstoneBucketOffset, meta, dist)
                 return

@@ -36,16 +36,16 @@ class VersionedRamDirectory private constructor(
     override fun openFileWritable(name: String): ByteBuffer {
         return (buffers[name] ?: throw FileDoesNotExistException(Paths.get(name)))
                 .duplicate()
-                .clear()
                 .order(VersionedDirectory.BYTE_ORDER)
+                .clear() as ByteBuffer
     }
 
     override fun openFileReadOnly(name: String): ByteBuffer {
-        return (buffers[name] ?: throw FileDoesNotExistException(Paths.get(name)))
+        return ((buffers[name] ?: throw FileDoesNotExistException(Paths.get(name)))
                 .duplicate()
-                .clear()
                 .order(VersionedDirectory.BYTE_ORDER)
-                .asReadOnlyBuffer()
+                .clear() as ByteBuffer)
+                .asReadOnlyBuffer() as ByteBuffer
     }
 
     override fun deleteFile(name: String) {

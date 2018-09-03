@@ -35,6 +35,7 @@ open class BaseState {
                 .toArray()
     }
 
-    @Param("100000", "1000000", "10000000", "20000000")
+//    @Param("100000", "1000000", "10000000", "20000000")
+    @Param("100000")
     protected var entries: Int = 0
 }

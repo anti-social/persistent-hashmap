@@ -72,8 +72,8 @@ jmh {
         include = it.split(',')
     }
 
-    warmupIterations = 1
+    warmupIterations = 2
     fork = 1
     iterations = 4
-    timeOnIteration = "1s"
+//    timeOnIteration = "1s"
 }

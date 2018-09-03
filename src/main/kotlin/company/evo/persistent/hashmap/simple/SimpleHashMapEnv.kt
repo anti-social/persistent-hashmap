@@ -68,8 +68,8 @@ class SimpleHashMapROEnv<K, V> (
                 this,
                 curBuffer
                         .duplicate()
-                        .clear()
                         .order(VersionedDirectory.BYTE_ORDER)
+                        .clear() as ByteBuffer
         )
     }
 

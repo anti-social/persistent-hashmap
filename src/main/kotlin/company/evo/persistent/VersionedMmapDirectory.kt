@@ -74,7 +74,7 @@ class VersionedMmapDirectory private constructor(
                 file.channel.use { channel ->
                     channel
                             .map(mode.mapMode, 0, channel.size())
-                            .order(ByteOrder.nativeOrder())
+                            .order(VersionedDirectory.BYTE_ORDER)
                 }
             }
         }
