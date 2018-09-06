@@ -59,7 +59,7 @@ class SimpleHashMapEnvTests : FunSpec() {
             }
         }
 
-        test("env: anonymous") {
+        test("env: anonymous").config(enabled = false) {
             SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
                     .createAnonymousHeap()
                     .use { env ->

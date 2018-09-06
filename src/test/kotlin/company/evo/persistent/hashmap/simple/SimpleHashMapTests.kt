@@ -15,7 +15,7 @@ class SimpleHashMapTests : StringSpec() {
     init {
         println("The seed for <$this> test cases is: $seed")
 
-        "test overflow" {
+        "test overflow".config(enabled = false) {
             val map = createMap<Int, Float>(5)
 
             map.maxEntries shouldBe 5
@@ -116,15 +116,15 @@ class SimpleHashMapTests : StringSpec() {
             map.size() shouldBe 0
         }
 
-        "put and remove a little random entries, then get them all" {
-            testRandomPutRemove(12, 17)
+        "put and remove a little random entries, then get them all".config(enabled = true) {
+            testRandomPutRemove(12, 17, generateTestCaseCode = true)
         }
 
-        "put and remove some random entries, then get them all".config(invocations = 100) {
+        "put and remove some random entries, then get them all".config(enabled = false, invocations = 100) {
             testRandomPutRemove(100, 163)
         }
 
-        "put and remove a bunch of random entries, then get them all" {
+        "put and remove a bunch of random entries, then get them all".config(enabled = false) {
             testRandomPutRemove(1_000_000, 1395263)
         }
     }
@@ -219,7 +219,7 @@ class SimpleHashMapTests : StringSpec() {
         ): SimpleHashMap<K, V> {
             val bucketLayout = SimpleHashMap.bucketLayout<K, V>()
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, bucketLayout.size)
-            val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
+            val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
             SimpleHashMap.initBuffer(buffer, bucketLayout, mapInfo)
             return SimpleHashMapImpl(0L, buffer, bucketLayout)
         }

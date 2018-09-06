@@ -347,7 +347,8 @@ open class SimpleHashMapROImpl<K, V>
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
 //            val meta = readBucketMeta(bucketOffset)
-            val meta = unsafeMetaSerializer.read(buffer, bucketOffset + bucketLayout.metaOffset).toInt()
+            println("Offsets: $bucketOffset, ${bucketOffset + bucketLayout.metaOffset}")
+            val meta = unsafeMetaSerializer.read(bucketOffset + bucketLayout.metaOffset).toInt()
             if (isBucketTombstoned(meta)) {
                 continue
             }
@@ -357,8 +358,8 @@ open class SimpleHashMapROImpl<K, V>
                 break
             }
             when (key) {
-                unsafeKeySerializer.read(buffer, bucketOffset + bucketLayout.keyOffset) -> {
-                    return unsafeValueSerializer.read(buffer, bucketOffset + bucketLayout.valueOffset)
+                unsafeKeySerializer.read(bucketOffset + bucketLayout.keyOffset) -> {
+                    return unsafeValueSerializer.read(bucketOffset + bucketLayout.valueOffset)
                 }
                 else -> {
                     return defaultValue

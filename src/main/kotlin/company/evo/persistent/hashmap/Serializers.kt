@@ -85,8 +85,10 @@ abstract class UnsafeSerializer<T>(buffer: ByteBuffer) {
     }
 
     protected val address: Long
+    protected val capacity = buffer.capacity()
 
     init {
+        assert(buffer.isDirect)
         val addressField = java.nio.Buffer::class.java.getDeclaredField("address")
         addressField.setAccessible(true)
         address = addressField.getLong(buffer)
@@ -97,10 +99,15 @@ class UnsafeShortSerializer(buffer: ByteBuffer) : UnsafeSerializer<Short>(buffer
 //    override val serial = 1L
 //    override val size = 4
 //    override fun hash(v: Short) = v.toInt()
-    fun read(buf: ByteBuffer, offset: Int): Short {
+    fun read(offset: Int): Short {
+        if (offset < 0 || offset + 2 >= capacity) {
+            throw IndexOutOfBoundsException(
+                    "Read at $offset occured, but buffer capacity is $capacity"
+            )
+        }
         return UnsafeSerializer.UNSAFE.getShort(address + offset)
     }
-    fun write(buf: ByteBuffer, offset: Int, v: Short) {
+    fun write(offset: Int, v: Short) {
         UnsafeSerializer.UNSAFE.putShort(address + offset, v)
     }
 }
@@ -109,10 +116,10 @@ class UnsafeIntSerializer(buffer: ByteBuffer) : UnsafeSerializer<Int>(buffer) {
 //    override val serial = 2L
 //    override val size = 4
 //    override fun hash(v: Int) = v
-    fun read(buf: ByteBuffer, offset: Int): Int {
+    fun read(offset: Int): Int {
         return UnsafeSerializer.UNSAFE.getInt(address + offset)
     }
-    fun write(buf: ByteBuffer, offset: Int, v: Int) {
+    fun write(offset: Int, v: Int) {
         UnsafeSerializer.UNSAFE.putInt(address + offset, v)
     }
 }
@@ -121,10 +128,10 @@ class UnsafeFloatSerializer(buffer: ByteBuffer) : UnsafeSerializer<Float>(buffer
 //    override val serial = 4L
 //    override val size = 4
 //    override fun hash(v: Float) = java.lang.Float.floatToIntBits(v)
-    fun read(buf: ByteBuffer, offset: Int): Float {
+    fun read(offset: Int): Float {
         return UnsafeSerializer.UNSAFE.getFloat(address + offset)
     }
-    fun write(buf: ByteBuffer, offset: Int, v: Float) {
+    fun write(offset: Int, v: Float) {
         UnsafeSerializer.UNSAFE.putFloat(address + offset, v)
     }
 }
