@@ -26,16 +26,21 @@ version = "0.0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    maven("https://dl.bintray.com/devexperts/Maven/")
 }
 
 dependencies {
     val kotlintestVersion = "3.1.11"
+    val lincheckVersion = "2.0"
 
     compile(kotlin("stdlib-jdk8"))
+    compile(kotlin("reflect"))
 
     testCompile("io.kotlintest", "kotlintest-core", kotlintestVersion)
     testCompile("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
     testCompile("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
+    // testCompile("com.devexperts.lincheck", "lincheck", lincheckVersion)
+    testCompile("com.devexperts.lincheck:lincheck:$lincheckVersion")
     testCompile("commons-io", "commons-io", "2.6")
 
     jmh("org.openjdk.jmh", "jmh-core", "1.20")
@@ -60,6 +65,7 @@ val test by tasks.getting(Test::class) {
         systemProperties["test.random.seed"] = it
     }
     useJUnitPlatform()
+    outputs.upToDateWhen { false }
 }
 
 configure<JcstressPluginExtension> {
