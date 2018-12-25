@@ -5,8 +5,7 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
 
 import java.nio.ByteBuffer
-import java.util.*
-import kotlin.coroutines.experimental.buildSequence
+import java.util.Random
 
 class SimpleHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
@@ -150,7 +149,7 @@ class SimpleHashMapTests : StringSpec() {
 
             override fun constants(): Iterable<Int> = emptyList()
 
-            override fun random(): Sequence<Int> = buildSequence {
+            override fun random(): Sequence<Int> = sequence {
                 for (v in keysStream) {
                     removeCandidate = when {
                         random.nextInt(3) == 0 -> {

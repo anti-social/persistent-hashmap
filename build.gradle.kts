@@ -13,7 +13,7 @@ buildscript {
 
 plugins {
     java
-    kotlin("jvm") version "1.2.41"
+    kotlin("jvm") version "1.3.11"
     id("me.champeau.gradle.jmh") version "0.4.7"
 }
 
@@ -29,7 +29,7 @@ repositories {
 }
 
 dependencies {
-    val kotlintestVersion = "3.1.6"
+    val kotlintestVersion = "3.1.11"
 
     compile(kotlin("stdlib-jdk8"))
 
