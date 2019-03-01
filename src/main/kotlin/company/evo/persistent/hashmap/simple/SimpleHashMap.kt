@@ -337,6 +337,7 @@ open class SimpleHashMapROImpl_K_V
                 maybeFound = { bucketOffset, _, meta, dist ->
 //                    when (key) {
 //                        bucketLayout.readKey(buffer, bucketOffset) -> {
+//                            statsCollector.addGet(true, dist)
 //                            return bucketLayout.readValue(buffer, bucketOffset)
 //                        }
 //                        else -> {
@@ -359,7 +360,7 @@ open class SimpleHashMapROImpl_K_V
                             break
                         }
                         m = meta2
-                        if (isBucketTombstoned(m)) {
+                        if (isBucketTombstoned(m) || isBucketEmpty(m)) {
                             return@find false
                         }
                     }
@@ -491,13 +492,16 @@ class SimpleHashMapImpl_K_V
                     if (size() >= header.maxEntries) {
                         return PutResult.OVERFLOW
                     }
+                    val bucketVersion = bucketVersion(meta)
                     if (tombstoneOffset < 0) {
+                        //writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion + 1)
                         writeBucketData(bucketOffset, key, value)
-                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion(meta))
+                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion + 1)
                         writeSize(size() + 1)
                     } else {
+                        //writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion + 1)
                         writeBucketData(tombstoneOffset, key, value)
-                        writeBucketMeta(tombstoneOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion(meta))
+                        writeBucketMeta(tombstoneOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion + 1)
                         writeTombstones(tombstones - 1)
                         writeSize(size() + 1)
                     }
@@ -518,15 +522,18 @@ class SimpleHashMapImpl_K_V
                             val nextBucketPageOffset = getPageOffset(nextBucketIx)
                             val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
                             val nextMeta = readBucketMeta(nextBucketOffset)
-                            if (isBucketEmpty(nextMeta)) {
-                                writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones - cleanupTombstones(bucketIx))
-                                writeSize(size() - 1)
-                            } else {
-                                writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones + 1)
-                                writeSize(size() - 1)
-                            }
+                            writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion(meta) + 1)
+                            writeTombstones(tombstones + 1)
+                            writeSize(size() - 1)
+//                            if (isBucketEmpty(nextMeta)) {
+//                                writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion(meta) + 1)
+//                                // writeTombstones(tombstones - cleanupTombstones(bucketIx))
+//                                writeSize(size() - 1)
+//                            } else {
+//                                writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion(meta) + 1)
+//                                // writeTombstones(tombstones + 1)
+//                                writeSize(size() - 1)
+//                            }
                             return true
                         }
                         else -> {
@@ -552,7 +559,7 @@ class SimpleHashMapImpl_K_V
             if (!isBucketTombstoned(meta)) {
                 break
             }
-            writeBucketMeta(prevBucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion(meta))
+            writeBucketMeta(prevBucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion(meta) + 1)
             cleaned++
             curBucketIx = prevBucketIx
         }
