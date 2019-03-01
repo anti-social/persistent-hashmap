@@ -3,29 +3,30 @@ package company.evo.persistent.hashmap
 import java.nio.ByteBuffer
 import kotlin.math.max
 
-class BucketLayout<K, V>(
-        val keySerializer: Serializer<K>,
-        val valueSerializer: Serializer<V>,
+typealias K = Int
+typealias V = Float
+
+class BucketLayout_K_V(
+        val keySerializer: Serializer_K,
+        val valueSerializer: Serializer_V,
         val metaSize: Int
 ) {
     companion object {
-        operator fun <K, V> invoke(
-                keyClass: Class<K>, valueClass: Class<V>, metaSize: Int
-        ): BucketLayout<K, V> {
-            return BucketLayout(
-                    Serializer.getForClass(keyClass),
-                    Serializer.getForClass(valueClass),
+        operator fun invoke(metaSize: Int): BucketLayout_K_V {
+            return BucketLayout_K_V(
+                    Serializer_K(),
+                    Serializer_V(),
                     metaSize
             )
         }
 
-        inline operator fun <reified K, reified V> invoke(metaSize: Int): BucketLayout<K, V> {
-            return BucketLayout(
-                    Serializer.getForClass(K::class.java),
-                    Serializer.getForClass(V::class.java),
-                    metaSize
-            )
-        }
+//        inline operator fun <reified V> invoke(metaSize: Int): BucketLayout_Key<V> {
+//            return BucketLayout_Key(
+//                    Serializer_Key(),
+//                    Serializer.getForClass(V::class.java),
+//                    metaSize
+//            )
+//        }
     }
     val keySize = keySerializer.size
     val valueSize = valueSerializer.size

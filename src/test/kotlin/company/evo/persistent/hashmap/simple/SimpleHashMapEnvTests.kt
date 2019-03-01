@@ -15,24 +15,24 @@ class SimpleHashMapEnvTests : FunSpec() {
 
         test("env: single writer, multiple readers") {
             withTempDir { tmpDir ->
-                SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                SimpleHashMapEnv_K_V.Builder()
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
 
-                            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                            SimpleHashMapEnv_K_V.Builder()
                                     .openReadOnly(tmpDir)
                                     .use { roEnv ->
                                         roEnv.getCurrentVersion() shouldBe 0L
                                     }
 
                             shouldThrow<VersionedDirectoryException> {
-                                SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                                SimpleHashMapEnv_K_V.Builder()
                                         .open(tmpDir)
                             }
                         }
 
-                SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                SimpleHashMapEnv_K_V.Builder()
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
@@ -42,7 +42,7 @@ class SimpleHashMapEnvTests : FunSpec() {
 
         test("env: copy map") {
             withTempDir { tmpDir ->
-                SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                SimpleHashMapEnv_K_V.Builder()
                         .open(tmpDir)
                         .use { env ->
                             val map = env.openMap()
@@ -50,7 +50,7 @@ class SimpleHashMapEnvTests : FunSpec() {
                             env.copyMap(map)
                             env.getCurrentVersion() shouldBe 1L
 
-                            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+                            SimpleHashMapEnv_K_V.Builder()
                                     .openReadOnly(tmpDir)
                                     .use { roEnv ->
                                         roEnv.getCurrentVersion() shouldBe 1L
@@ -60,7 +60,7 @@ class SimpleHashMapEnvTests : FunSpec() {
         }
 
         test("env: anonymous") {
-            SimpleHashMapEnv.Builder(Int::class.javaObjectType, Float::class.javaObjectType)
+            SimpleHashMapEnv_K_V.Builder()
                     .createAnonymousHeap()
                     .use { env ->
                         env.openMap()

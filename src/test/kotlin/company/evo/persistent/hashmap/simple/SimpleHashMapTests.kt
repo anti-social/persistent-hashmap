@@ -15,7 +15,7 @@ class SimpleHashMapTests : StringSpec() {
         println("The seed for <$this> test cases is: $seed")
 
         "test overflow" {
-            val map = createMap<Int, Float>(5)
+            val map = createMap(5)
 
             map.maxEntries shouldBe 5
             map.capacity shouldBe 7
@@ -71,7 +71,7 @@ class SimpleHashMapTests : StringSpec() {
         }
 
         "skip tombstone when putting existing key" {
-            val map = createMap<Int, Float>(5)
+            val map = createMap(5)
             map.capacity shouldBe 7
 
             map.put(0, 1.0F)
@@ -83,7 +83,7 @@ class SimpleHashMapTests : StringSpec() {
         }
 
         "no tombstone when removing last record in chain" {
-            val map = createMap<Int, Float>(5)
+            val map = createMap(5)
             map.capacity shouldBe 7
 
             map.put(0, 1.0F)
@@ -93,7 +93,7 @@ class SimpleHashMapTests : StringSpec() {
         }
 
         "cleanup tombstones when removing last record in chain" {
-            val map = createMap<Int, Float>(5)
+            val map = createMap(5)
             map.capacity shouldBe 7
 
             map.put(0, 1.0F)
@@ -138,7 +138,7 @@ class SimpleHashMapTests : StringSpec() {
             println("// Generate data")
             println("val map = createMap<Int, Float>($limit)")
         }
-        val map = createMap<Int, Float>(limit)
+        val map = createMap(limit)
         map.maxEntries shouldBe limit
         map.capacity shouldBe expectedCapacity
 
@@ -213,14 +213,14 @@ class SimpleHashMapTests : StringSpec() {
     }
 
     companion object {
-        private inline fun <reified K, reified V> createMap(
+        private fun createMap(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap<K, V> {
-            val bucketLayout = SimpleHashMap.bucketLayout<K, V>()
+        ): SimpleHashMap_K_V {
+            val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
-            SimpleHashMap.initBuffer(buffer, bucketLayout, mapInfo)
-            return SimpleHashMapImpl(0L, buffer, bucketLayout)
+            SimpleHashMap_K_V.initBuffer(buffer, bucketLayout, mapInfo)
+            return SimpleHashMapImpl_K_V(0L, buffer, bucketLayout)
         }
     }
 }

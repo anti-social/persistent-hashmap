@@ -42,6 +42,16 @@ class IntSerializer : Serializer<Int> {
     }
 }
 
+class Serializer_K {
+    val serial = 2L
+    val size = 4
+    fun hash(v: Int) = v
+    fun read(buf: ByteBuffer, offset: Int) = buf.getInt(offset)
+    fun write(buf: ByteBuffer, offset: Int, v: Int) {
+        buf.putInt(offset, v)
+    }
+}
+
 class LongSerializer : Serializer<Long> {
     override val serial = 3L
     override val size = 8
@@ -58,6 +68,16 @@ class FloatSerializer : Serializer<Float> {
     override fun hash(v: Float) = java.lang.Float.floatToIntBits(v)
     override fun read(buf: ByteBuffer, offset: Int) = buf.getFloat(offset)
     override fun write(buf: ByteBuffer, offset: Int, v: Float) {
+        buf.putFloat(offset, v)
+    }
+}
+
+class Serializer_V {
+    val serial = 4L
+    val size = 4
+    fun hash(v: Float) = java.lang.Float.floatToIntBits(v)
+    fun read(buf: ByteBuffer, offset: Int) = buf.getFloat(offset)
+    fun write(buf: ByteBuffer, offset: Int, v: Float) {
         buf.putFloat(offset, v)
     }
 }

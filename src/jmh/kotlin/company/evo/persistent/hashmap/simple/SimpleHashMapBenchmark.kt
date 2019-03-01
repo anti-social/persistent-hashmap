@@ -1,21 +1,27 @@
 package company.evo.persistent.hashmap.simple
 
-import org.openjdk.jmh.annotations.*
+import org.openjdk.jmh.annotations.Benchmark
+import org.openjdk.jmh.annotations.Level
+import org.openjdk.jmh.annotations.Scope
+import org.openjdk.jmh.annotations.Setup
+import org.openjdk.jmh.annotations.State
+import org.openjdk.jmh.annotations.TearDown
+import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 import java.nio.ByteBuffer
 
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
     open class SimpleHashMapState : BaseState() {
-        lateinit var map: SimpleHashMapImpl<Int, Float>
+        lateinit var map: SimpleHashMapImpl_K_V
 
         @Setup(Level.Trial)
         fun initMap() {
-            val bucketLayout = SimpleHashMap.bucketLayout<Int, Float>()
+            val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
             val mapInfo = MapInfo.calcFor(entries, 0.5, bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
-            SimpleHashMap.initBuffer(buffer, bucketLayout, mapInfo)
-            map = SimpleHashMapImpl(0L, buffer, bucketLayout, StatsCollectorImpl())
+            SimpleHashMap_K_V.initBuffer(buffer, bucketLayout, mapInfo)
+            map = SimpleHashMapImpl_K_V(0L, buffer, bucketLayout, DefaultStatsCollector())
 
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)
