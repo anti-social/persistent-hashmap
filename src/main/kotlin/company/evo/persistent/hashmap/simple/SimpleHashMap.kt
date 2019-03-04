@@ -100,7 +100,26 @@ class DefaultStatsCollector : StatsCollector() {
             maxGetDistance = dist
         }
     }
+}
 
+abstract class TracingCollector {
+    abstract fun add(s: String)
+    abstract fun collect(): String
+}
+
+class DummyTracingCollector : TracingCollector() {
+    override fun add(s: String) {}
+    override fun collect(): String = ""
+}
+
+class DefaultTracingCollector : TracingCollector() {
+    private val written = arrayListOf<String>()
+    override fun add(s: String) {
+        written.add(s)
+    }
+    override fun collect(): String {
+        return written.joinToString(" | ")
+    }
 }
 
 interface SimpleHashMapRO_K_V {
@@ -114,6 +133,7 @@ interface SimpleHashMapRO_K_V {
     fun size(): Int
 
     fun stats(): StatsCollector
+    fun tracing(): TracingCollector
 
     companion object {
         fun fromEnv(env: SimpleHashMapROEnv_K_V, buffer: ByteBuffer): SimpleHashMapRO_K_V {
@@ -278,7 +298,8 @@ open class SimpleHashMapROImpl_K_V
         override val version: Long,
         protected val buffer: ByteBuffer,
         protected val bucketLayout: BucketLayout_K_V,
-        protected val statsCollector: StatsCollector = DummyStatsCollector()
+        protected val statsCollector: StatsCollector = DummyStatsCollector(),
+        protected val tracingCollector: TracingCollector = DummyTracingCollector()
 ) : SimpleHashMapRO_K_V {
 
     protected val keySerializer = bucketLayout.keySerializer
@@ -301,6 +322,7 @@ open class SimpleHashMapROImpl_K_V
     override fun size() = buffer.getInt(SimpleHashMap_K_V.Header_K_V.SIZE_OFFSET)
 
     override fun stats() = statsCollector
+    override fun tracing() = tracingCollector
 
     override fun toString(): String {
         val indexPad = capacity.toString().length
@@ -348,8 +370,8 @@ open class SimpleHashMapROImpl_K_V
                     var value: V
                     while (true) {
                         value = when (key) {
-                            bucketLayout.readKey(buffer, bucketOffset) -> {
-                                bucketLayout.readValue(buffer, bucketOffset)
+                            readKey(bucketOffset) -> {
+                                readValue(bucketOffset)
                             }
                             else -> {
                                 return@find false
@@ -422,19 +444,36 @@ open class SimpleHashMapROImpl_K_V
     }
 
     protected fun readBucketMeta(offset: Int): Int {
-        return buffer.getShort(offset + bucketLayout.metaOffset).toInt() and 0xFFFF
+        val m = buffer.getShort(offset + bucketLayout.metaOffset).toInt() and 0xFFFF
+        tracingCollector.add("readBucketMeta($offset) = 0x${m.toString(16)}")
+        return m
+    }
+
+    protected fun readKey(offset: Int): K {
+        val k = bucketLayout.readKey(buffer, offset)
+        tracingCollector.add("readKey($offset) = $k")
+        return k
+    }
+
+    protected fun readValue(offset: Int): V {
+        val v =  bucketLayout.readValue(buffer, offset)
+        tracingCollector.add("readValue($offset) = $v")
+        return v
     }
 
     protected fun writeBucketMeta(offset: Int, tag: Int, version: Int) {
+        val m = (tag or (version and SimpleHashMap_K_V.VER_TAG_MASK))
         buffer.putShort(
-                offset + bucketLayout.metaOffset,
-                (tag or (version and SimpleHashMap_K_V.VER_TAG_MASK)).toShort()
+                offset + bucketLayout.metaOffset, m.toShort()
         )
+        tracingCollector.add("writeBucketMeta($offset, $tag, $version, m=0x${m.toString(16)})")
     }
 
     protected fun writeBucketData(offset: Int, key: K, value: V) {
         bucketLayout.writeKey(buffer, offset, key)
+        tracingCollector.add("writeBucketKey($offset, $key)")
         bucketLayout.writeValue(buffer, offset, value)
+        tracingCollector.add("writeBucketValue($offset, $value)")
     }
 
     protected fun getPageOffset(bucketIx: Int): Int {
@@ -460,14 +499,17 @@ class SimpleHashMapImpl_K_V
         version: Long,
         buffer: ByteBuffer,
         bucketLayout: BucketLayout_K_V,
-        statsCollector: StatsCollector = DummyStatsCollector()
+        statsCollector: StatsCollector = DummyStatsCollector(),
+        tracingCollector: TracingCollector = DummyTracingCollector()
 ) : SimpleHashMap_K_V, SimpleHashMapROImpl_K_V(
         version,
         buffer,
         bucketLayout,
-        statsCollector
+        statsCollector,
+        tracingCollector
 ) {
     override fun put(key: K, value: V): PutResult {
+        tracingCollector.add("\nput($key, $value)\n")
         val hash = keySerializer.hash(key)
 //        println(">>> put($key, $value)")
         find(
@@ -492,16 +534,17 @@ class SimpleHashMapImpl_K_V
                     if (size() >= header.maxEntries) {
                         return PutResult.OVERFLOW
                     }
-                    val bucketVersion = bucketVersion(meta)
                     if (tombstoneOffset < 0) {
-                        //writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion + 1)
+//                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion + 1)
                         writeBucketData(bucketOffset, key, value)
-                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion + 1)
+                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion(meta) + 1)
                         writeSize(size() + 1)
                     } else {
-                        //writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion + 1)
+                        val tombstoneMeta = readBucketMeta(tombstoneOffset)
+
+//                        writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion + 1)
                         writeBucketData(tombstoneOffset, key, value)
-                        writeBucketMeta(tombstoneOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion + 1)
+                        writeBucketMeta(tombstoneOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion(tombstoneMeta) + 1)
                         writeTombstones(tombstones - 1)
                         writeSize(size() + 1)
                     }
@@ -511,6 +554,7 @@ class SimpleHashMapImpl_K_V
     }
 
     override fun remove(key: K): Boolean {
+        tracingCollector.add("\nremove($key)\n")
         val hash = keySerializer.hash(key)
 //        println(">>> remove($key)")
         find(
