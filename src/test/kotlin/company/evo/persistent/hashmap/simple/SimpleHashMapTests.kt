@@ -1,11 +1,13 @@
 package company.evo.persistent.hashmap.simple
 
+import java.nio.ByteBuffer
+import java.util.Random
+
 import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
 
-import java.nio.ByteBuffer
-import java.util.Random
+import org.agrona.concurrent.UnsafeBuffer
 
 class SimpleHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
@@ -219,8 +221,8 @@ class SimpleHashMapTests : StringSpec() {
             val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
-            SimpleHashMap_K_V.initBuffer(buffer, bucketLayout, mapInfo)
-            return SimpleHashMapImpl_K_V(0L, buffer, bucketLayout)
+            SimpleHashMap_K_V.initBuffer(UnsafeBuffer(buffer), bucketLayout, mapInfo)
+            return SimpleHashMapImpl_K_V(0L, UnsafeBuffer(buffer), bucketLayout)
         }
     }
 }

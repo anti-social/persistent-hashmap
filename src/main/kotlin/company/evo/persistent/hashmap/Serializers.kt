@@ -2,6 +2,8 @@ package company.evo.persistent.hashmap
 
 import java.nio.ByteBuffer
 
+import org.agrona.concurrent.AtomicBuffer
+
 interface Serializer<T> {
     companion object {
         @Suppress("UNCHECKED_CAST")
@@ -46,8 +48,8 @@ class Serializer_K {
     val serial = 2L
     val size = 4
     fun hash(v: Int) = v
-    fun read(buf: ByteBuffer, offset: Int) = buf.getInt(offset)
-    fun write(buf: ByteBuffer, offset: Int, v: Int) {
+    fun read(buf: AtomicBuffer, offset: Int) = buf.getInt(offset)
+    fun write(buf: AtomicBuffer, offset: Int, v: Int) {
         buf.putInt(offset, v)
     }
 }
@@ -76,8 +78,8 @@ class Serializer_V {
     val serial = 4L
     val size = 4
     fun hash(v: Float) = java.lang.Float.floatToIntBits(v)
-    fun read(buf: ByteBuffer, offset: Int) = buf.getFloat(offset)
-    fun write(buf: ByteBuffer, offset: Int, v: Float) {
+    fun read(buf: AtomicBuffer, offset: Int) = buf.getFloat(offset)
+    fun write(buf: AtomicBuffer, offset: Int, v: Float) {
         buf.putFloat(offset, v)
     }
 }

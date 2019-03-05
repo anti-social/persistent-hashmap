@@ -1,5 +1,9 @@
 package company.evo.persistent.hashmap.simple
 
+import java.nio.ByteBuffer
+
+import org.agrona.concurrent.UnsafeBuffer
+
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
 import org.openjdk.jmh.annotations.Scope
@@ -8,7 +12,6 @@ import org.openjdk.jmh.annotations.State
 import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
-import java.nio.ByteBuffer
 
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
@@ -20,8 +23,8 @@ open class SimpleHashMapBenchmark {
             val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
             val mapInfo = MapInfo.calcFor(entries, 0.5, bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
-            SimpleHashMap_K_V.initBuffer(buffer, bucketLayout, mapInfo)
-            map = SimpleHashMapImpl_K_V(0L, buffer, bucketLayout, DefaultStatsCollector())
+            SimpleHashMap_K_V.initBuffer(UnsafeBuffer(buffer), bucketLayout, mapInfo)
+            map = SimpleHashMapImpl_K_V(0L, UnsafeBuffer(buffer), bucketLayout, DefaultStatsCollector())
 
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)

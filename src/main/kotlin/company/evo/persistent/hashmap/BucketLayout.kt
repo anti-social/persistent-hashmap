@@ -1,7 +1,8 @@
 package company.evo.persistent.hashmap
 
-import java.nio.ByteBuffer
 import kotlin.math.max
+
+import org.agrona.concurrent.AtomicBuffer
 
 typealias K = Int
 typealias V = Float
@@ -54,33 +55,31 @@ class BucketLayout_K_V(
         size = ((bucketSize - 1) / align + 1) * align
     }
 
-    fun readKey(buffer: ByteBuffer, bucketOffset: Int): K {
+    fun readKey(buffer: AtomicBuffer, bucketOffset: Int): K {
         return keySerializer.read(buffer, bucketOffset + keyOffset)
     }
 
-    fun readRawKey(buffer: ByteBuffer, bucketOffset: Int): ByteArray {
+    fun readRawKey(buffer: AtomicBuffer, bucketOffset: Int): ByteArray {
         val array = ByteArray(keySize)
-        buffer.position(bucketOffset + keyOffset)
-        buffer.get(array)
+        buffer.getBytes(0, array)
         return array
     }
 
-    fun readValue(buffer: ByteBuffer, bucketOffset: Int): V {
+    fun readValue(buffer: AtomicBuffer, bucketOffset: Int): V {
         return valueSerializer.read(buffer, bucketOffset + valueOffset)
     }
 
-    fun readRawValue(buffer: ByteBuffer, bucketOffset: Int): ByteArray {
+    fun readRawValue(buffer: AtomicBuffer, bucketOffset: Int): ByteArray {
         val array = ByteArray(valueSize)
-        buffer.position(bucketOffset + valueOffset)
-        buffer.get(array)
+        buffer.getBytes(0, array)
         return array
     }
 
-    fun writeKey(buffer: ByteBuffer, bucketOffset: Int, key: K) {
+    fun writeKey(buffer: AtomicBuffer, bucketOffset: Int, key: K) {
         keySerializer.write(buffer, bucketOffset + keyOffset, key)
     }
 
-    fun writeValue(buffer: ByteBuffer, bucketOffset: Int, value: V) {
+    fun writeValue(buffer: AtomicBuffer, bucketOffset: Int, value: V) {
         valueSerializer.write(buffer, bucketOffset + valueOffset, value)
     }
 

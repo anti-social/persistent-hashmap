@@ -35,6 +35,7 @@ dependencies {
 
     compile(kotlin("stdlib-jdk8"))
     compile(kotlin("reflect"))
+    compile("org.agrona", "agrona", "0.9.33")
 
     testCompile("io.kotlintest", "kotlintest-core", kotlintestVersion)
     testCompile("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
@@ -70,6 +71,7 @@ val test by tasks.getting(Test::class) {
 
 configure<JcstressPluginExtension> {
     jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
+
 }
 
 
@@ -78,6 +80,7 @@ jmh {
         include = it.split(',')
     }
 
+    jvmArgsAppend = listOf("-Dagrona.disable.bounds.checks=true")
     warmupIterations = 1
     fork = 1
     iterations = 4

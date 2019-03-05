@@ -1,20 +1,19 @@
 package company.evo.persistent.hashmap.simple
 
+import java.nio.ByteBuffer
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.concurrent.locks.ReentrantLock
+
 import company.evo.persistent.FileDoesNotExistException
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.BucketLayout_K_V
 import company.evo.persistent.hashmap.PRIMES
-import company.evo.persistent.hashmap.Serializer
 import company.evo.persistent.hashmap.Serializer_K
 import company.evo.persistent.hashmap.Serializer_V
-
-import java.nio.ByteBuffer
-import java.nio.file.Path
-import java.nio.file.Paths
-
-import java.util.concurrent.locks.ReentrantLock
+import org.agrona.concurrent.UnsafeBuffer
 
 abstract class SimpleHashMapBaseEnv(
         protected val dir: VersionedDirectory,
@@ -68,10 +67,11 @@ class SimpleHashMapROEnv_K_V (
 
         return SimpleHashMapRO_K_V.fromEnv(
                 this,
-                curBuffer
+                UnsafeBuffer(curBuffer
                         .duplicate()
                         .clear()
                         .order(VersionedDirectory.BYTE_ORDER)
+                )
         )
     }
 
@@ -165,7 +165,7 @@ class SimpleHashMapEnv_K_V private constructor(
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(initialEntries, loadFactor, bucketLayout.size)
             val mapBuffer = dir.createFile(filename, mapInfo.bufferSize)
-            SimpleHashMap_K_V.initBuffer(mapBuffer, bucketLayout, mapInfo)
+            SimpleHashMap_K_V.initBuffer(UnsafeBuffer(mapBuffer), bucketLayout, mapInfo)
             return SimpleHashMapEnv_K_V(dir, bucketLayout, loadFactor, collectStats)
         }
 
@@ -177,7 +177,7 @@ class SimpleHashMapEnv_K_V private constructor(
     fun openMap(): SimpleHashMap_K_V {
         val ver = getCurrentVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return SimpleHashMap_K_V.fromEnv(this, mapBuffer)
+        return SimpleHashMap_K_V.fromEnv(this, UnsafeBuffer(mapBuffer))
     }
 
     fun copyMap(map: SimpleHashMap_K_V): SimpleHashMap_K_V {
@@ -188,7 +188,7 @@ class SimpleHashMapEnv_K_V private constructor(
         val mapBuffer = dir.createFile(
                 getHashmapFilename(newVersion), mapInfo.bufferSize
         )
-        map.header.dump(mapBuffer)
+        map.header.dump(UnsafeBuffer(mapBuffer))
         // TODO Really copy map data
         dir.writeVersion(newVersion)
         dir.deleteFile(getHashmapFilename(map.version))
