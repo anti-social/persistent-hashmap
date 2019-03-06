@@ -16,7 +16,8 @@ import org.openjdk.jmh.infra.Blackhole
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
     open class SimpleHashMapState : BaseState() {
-        lateinit var map: SimpleHashMapImpl_K_V
+        var map: SimpleHashMapImpl_K_V? = null
+        var i = 0
 
         @Setup(Level.Trial)
         fun initMap() {
@@ -29,15 +30,18 @@ open class SimpleHashMapBenchmark {
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)
             keys.zip(values).forEach { (k, v) ->
-                map.put(k, v)
+                map!!.put(k, v)
             }
         }
 
         @TearDown
         fun printStats() {
             println()
+            println("======== Map Info ========")
+            println(map?.toString())
+            println("===========================")
             println("======== Map Stats ========")
-            println(map.stats())
+            println(map?.stats())
             println("===========================")
         }
     }
@@ -45,11 +49,16 @@ open class SimpleHashMapBenchmark {
     @Benchmark
     @Threads(1)
     open fun benchmark_1_reader(state: SimpleHashMapState, blackhole: Blackhole) {
+        // blackhole.consume(
+        //         state.map.get(BaseState.intKeys[state.i], 0.0F)
+        // )
+        // state.i++
+        // state.i = state.i and BaseState.IX_MASK
+        val map = state.map
         for (ix in BaseState.ixs) {
             blackhole.consume(
-                    state.map.get(BaseState.intKeys[ix], 0.0F)
+                    map!!.get(BaseState.intKeys[ix], 0.0F)
             )
         }
     }
-
 }

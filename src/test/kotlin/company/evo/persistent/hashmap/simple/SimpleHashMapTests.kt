@@ -21,12 +21,12 @@ class SimpleHashMapTests : StringSpec() {
 
             map.maxEntries shouldBe 5
             map.capacity shouldBe 7
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 0
 
             map.put(1, 1.1F) shouldBe PutResult.OK
             map.get(1, 0.0F) shouldBe 1.1F
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 1
 
             map.put(2, 1.2F) shouldBe PutResult.OK
@@ -34,35 +34,35 @@ class SimpleHashMapTests : StringSpec() {
             map.put(4, 1.4F) shouldBe PutResult.OK
             map.put(5, 1.5F) shouldBe PutResult.OK
             map.put(6, 1.6F) shouldBe PutResult.OVERFLOW
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 5
 
             map.remove(4) shouldBe true
-            map.tombstones shouldBe 1
+            map.tombstones() shouldBe 1
             map.size() shouldBe 4
 
             map.remove(5) shouldBe true
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 3
 
             map.remove(5) shouldBe false
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 3
 
             map.put(6, 1.6F) shouldBe PutResult.OK
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 4
 
             map.put(11, 1.11F) shouldBe PutResult.OK
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 5
 
             map.put(7, 1.7F) shouldBe PutResult.OVERFLOW
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 5
 
             map.put(6, 1.66F) shouldBe PutResult.OK
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 5
 
             map.get(1, 0.0F) shouldBe 1.1F
@@ -80,7 +80,7 @@ class SimpleHashMapTests : StringSpec() {
             map.put(7, 1.7F)
             map.remove(0)
             map.put(7, 7.0F)
-            map.tombstones shouldBe 1
+            map.tombstones() shouldBe 1
             map.size() shouldBe 1
         }
 
@@ -90,7 +90,7 @@ class SimpleHashMapTests : StringSpec() {
 
             map.put(0, 1.0F)
             map.remove(0)
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 0
         }
 
@@ -101,19 +101,19 @@ class SimpleHashMapTests : StringSpec() {
             map.put(0, 1.0F)
             map.put(1, 1.1F)
             map.put(2, 1.2F)
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 3
 
             map.remove(0)
-            map.tombstones shouldBe 1
+            map.tombstones() shouldBe 1
             map.size() shouldBe 2
 
             map.remove(1)
-            map.tombstones shouldBe 2
+            map.tombstones() shouldBe 2
             map.size() shouldBe 1
 
             map.remove(2)
-            map.tombstones shouldBe 0
+            map.tombstones() shouldBe 0
             map.size() shouldBe 0
         }
 

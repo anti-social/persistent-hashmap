@@ -107,11 +107,11 @@ interface SimpleHashMapRO_K_V {
     val version: Long
     val maxEntries: Int
     val capacity: Int
-    val tombstones: Int
     val header: SimpleHashMap_K_V.Header_K_V
 
     fun get(key: K, defaultValue: V): V
     fun size(): Int
+    fun tombstones(): Int
 
     fun stats(): StatsCollector
 
@@ -172,9 +172,9 @@ interface SimpleHashMap_K_V : SimpleHashMapRO_K_V {
     class Header_K_V(
             val bucketLayout: BucketLayout_K_V,
             val capacity: Int,
-            val maxEntries: Int,
-            val size: Int = 0,
-            val tombstones: Int = 0
+            val maxEntries: Int
+            // val size: Int = 0,
+            // val tombstones: Int = 0
     ) {
         companion object {
             val MAGIC = "SPHT\r\n\r\n".toByteArray()
@@ -214,14 +214,14 @@ interface SimpleHashMap_K_V : SimpleHashMapRO_K_V {
                 }
                 val capacity = toIntOrFail(buffer.getLong(CAPACITY_OFFSET), "capacity")
                 val maxEntries = toIntOrFail(buffer.getLong(MAX_ENTRIES_OFFSET), "initialEntries")
-                val size = toIntOrFail(buffer.getLong(SIZE_OFFSET), "size")
-                val thumbstones = toIntOrFail(buffer.getLong(TOMBSTONES_OFFSET), "tombstones")
+                // val size = toIntOrFail(buffer.getLong(SIZE_OFFSET), "size")
+                // val thumbstones = toIntOrFail(buffer.getLong(TOMBSTONES_OFFSET), "tombstones")
                 return Header_K_V(
                         bucketLayout,
                         capacity = capacity,
-                        maxEntries = maxEntries,
-                        size = size,
-                        tombstones = thumbstones
+                        maxEntries = maxEntries
+                        // size = size,
+                        // tombstones = thumbstones
                 )
             }
 
@@ -255,16 +255,14 @@ interface SimpleHashMap_K_V : SimpleHashMapRO_K_V {
             buffer.putLong(FLAGS_OFFSET, calcFlags(bucketLayout.keySerializer, bucketLayout.valueSerializer))
             buffer.putLong(CAPACITY_OFFSET, capacity.toLong())
             buffer.putLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
-            buffer.putLong(SIZE_OFFSET, size.toLong())
-            buffer.putLong(TOMBSTONES_OFFSET, tombstones.toLong())
+            buffer.putLong(SIZE_OFFSET, 0)
+            buffer.putLong(TOMBSTONES_OFFSET, 0)
         }
 
         override fun toString(): String {
             return "SimpleHashMap.Header<" +
                     "capacity = $capacity, " +
-                    "maxEntries = $maxEntries, " +
-                    "tombstones = $tombstones, " +
-                    "size: $size" +
+                    "maxEntries = $maxEntries" +
                     ">"
         }
     }
@@ -292,27 +290,32 @@ open class SimpleHashMapROImpl_K_V
 
     override val maxEntries = header.maxEntries
     override val capacity = header.capacity
-    override val tombstones: Int
-        get() = readTombstones()
     override fun size() = buffer.getInt(SimpleHashMap_K_V.Header_K_V.SIZE_OFFSET)
+    override fun tombstones() = readTombstones()
 
     override fun stats() = statsCollector
 
-    override fun toString(): String {
+    override fun toString() = toString(false)
+
+    fun toString(dumpContent: Boolean): String {
         val indexPad = capacity.toString().length
-        val dump = (0 until capacity).joinToString("\n") { bucketIx ->
-            val pageOffset = getPageOffset(bucketIx)
-            val bucketOffset = getBucketOffset(pageOffset, bucketIx)
-            "${bucketIx.toString().padEnd(indexPad)}: " +
-                    "0x${readBucketMeta(bucketOffset).toString(16)}, " +
-                    "${bucketLayout.readRawKey(buffer, bucketOffset).joinToString(", ", "[", "]")}, " +
-                    "${bucketLayout.readRawValue(buffer, bucketOffset).joinToString(", ", "[", "]")}"
-        }
-        return """Header: $header
+        val description = """Header: $header
             |Bucket layout: $bucketLayout
-            |Dump:
-            |$dump
+            |Size: ${size()}
+            |Tombstones: ${tombstones()}
         """.trimMargin()
+        if (dumpContent) {
+            val content = (0 until capacity).joinToString("\n") { bucketIx ->
+                val pageOffset = getPageOffset(bucketIx)
+                val bucketOffset = getBucketOffset(pageOffset, bucketIx)
+                "${bucketIx.toString().padEnd(indexPad)}: " +
+                        "0x${readBucketMeta(bucketOffset).toString(16)}, " +
+                        "${bucketLayout.readRawKey(buffer, bucketOffset).joinToString(", ", "[", "]")}, " +
+                        "${bucketLayout.readRawValue(buffer, bucketOffset).joinToString(", ", "[", "]")}"
+            }
+            return "$description\n$content"
+        }
+        return description
     }
 
     protected fun writeSize(size: Int) {
@@ -498,7 +501,7 @@ class SimpleHashMapImpl_K_V
                     } else {
                         writeBucketData(tombstoneOffset, key, value)
                         writeBucketMeta(tombstoneOffset, SimpleHashMap_K_V.META_OCCUPIED, bucketVersion(tombstoneMeta) + 1)
-                        writeTombstones(tombstones - 1)
+                        writeTombstones(tombstones() - 1)
                         writeSize(size() + 1)
                     }
                 }
@@ -520,11 +523,11 @@ class SimpleHashMapImpl_K_V
 
                             if (isBucketEmpty(nextMeta)) {
                                 writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_FREE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones - cleanupTombstones(bucketIx))
+                                writeTombstones(tombstones() - cleanupTombstones(bucketIx))
                                 writeSize(size() - 1)
                             } else {
                                 writeBucketMeta(bucketOffset, SimpleHashMap_K_V.META_TOMBSTONE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones + 1)
+                                writeTombstones(tombstones() + 1)
                                 writeSize(size() - 1)
                             }
                             return true

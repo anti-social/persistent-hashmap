@@ -79,7 +79,7 @@ jmh {
         include = it.split(',')
     }
 
-    jvmArgs = listOf("-Dagrona.disable.bounds.checks=true")
+    // jvmArgs = listOf("-Dagrona.disable.bounds.checks=true")
     warmupIterations = 1
     fork = 1
     iterations = 4
