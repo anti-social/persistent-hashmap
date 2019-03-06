@@ -26,20 +26,18 @@ public class SimpleHashMapStressTest {
                 SimpleHashMap_K_V.Companion.bucketLayout_K_V();
         MapInfo mapInfo = MapInfo.Companion.calcFor(5, 0.75, bucketLayout.getSize());
         ByteBuffer buffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize()).order(ByteOrder.nativeOrder());
-        SimpleHashMap_K_V.Companion.initBuffer(buffer, bucketLayout, mapInfo);
+        SimpleHashMap_K_V.Companion.initBuffer(new UnsafeBuffer(buffer), bucketLayout, mapInfo);
         map = new SimpleHashMapImpl_K_V(
                 0L, new UnsafeBuffer(buffer), bucketLayout,
-                new DummyStatsCollector(),
-                new DummyTracingCollector()
+                new DummyStatsCollector()
         );
         assert map.getCapacity() == 7;
         map.put(1, 101);
         map.put(8, 108);
         ByteBuffer roBuffer = buffer.duplicate().clear().order(ByteOrder.nativeOrder());
         mapRO = new SimpleHashMapROImpl_K_V(
-                0L, new UnsafeBuffer(roBuffer), bucketLayout,
-                new DummyStatsCollector(),
-                new DefaultTracingCollector()
+                0L, new UnsafeBuffer(roBuffer),
+                new DummyStatsCollector()
         );
     }
 

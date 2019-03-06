@@ -74,13 +74,12 @@ configure<JcstressPluginExtension> {
 
 }
 
-
 jmh {
     System.getProperty("jmh.include")?.let {
         include = it.split(',')
     }
 
-    jvmArgsAppend = listOf("-Dagrona.disable.bounds.checks=true")
+    jvmArgs = listOf("-Dagrona.disable.bounds.checks=true")
     warmupIterations = 1
     fork = 1
     iterations = 4

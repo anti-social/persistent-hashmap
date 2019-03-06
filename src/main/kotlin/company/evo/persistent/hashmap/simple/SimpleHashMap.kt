@@ -8,7 +8,6 @@ import company.evo.persistent.hashmap.Serializer_V
 
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.AtomicBuffer
-import org.agrona.concurrent.UnsafeBuffer
 
 open class PersistentHashMapException(msg: String, cause: Exception? = null) : Exception(msg, cause)
 class InvalidHashtableException(msg: String) : PersistentHashMapException(msg)
@@ -121,7 +120,6 @@ interface SimpleHashMapRO_K_V {
             return SimpleHashMapROImpl_K_V(
                     env.getCurrentVersion(),
                     buffer,
-                    env.bucketLayout,
                     if (env.collectStats) DefaultStatsCollector() else DummyStatsCollector()
             )
         }
@@ -276,12 +274,12 @@ open class SimpleHashMapROImpl_K_V
 @JvmOverloads constructor(
         override val version: Long,
         protected val buffer: AtomicBuffer,
-        protected val bucketLayout: BucketLayout_K_V,
         protected val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_K_V {
 
-    protected val keySerializer = bucketLayout.keySerializer
-    protected val valueSerializer = bucketLayout.valueSerializer
+    protected val keySerializer = Serializer_K()
+    protected val valueSerializer = Serializer_V()
+    protected val bucketLayout = BucketLayout_K_V(keySerializer, valueSerializer, SimpleHashMap_K_V.META_SIZE)
     val bucketsPerPage = MapInfo.calcBucketsPerPage(bucketLayout.size)
 
     override val header = SimpleHashMap_K_V.Header_K_V.load(buffer, bucketLayout)
@@ -312,7 +310,7 @@ open class SimpleHashMapROImpl_K_V
         }
         return """Header: $header
             |Bucket layout: $bucketLayout
-            |Data:
+            |Dump:
             |$dump
         """.trimMargin()
     }
@@ -381,7 +379,7 @@ open class SimpleHashMapROImpl_K_V
                 tombstoneMeta = meta
                 continue
             }
-            if (isBucketEmpty(meta) /* || dist > SimpleHashMapBaseEnv.MAX_DISTANCE */) {
+            if (isBucketEmpty(meta) || dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
                 notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
                 return
             }
@@ -469,7 +467,6 @@ class SimpleHashMapImpl_K_V
 ) : SimpleHashMap_K_V, SimpleHashMapROImpl_K_V(
         version,
         buffer,
-        bucketLayout,
         statsCollector
 ) {
     override fun put(key: K, value: V): PutResult {

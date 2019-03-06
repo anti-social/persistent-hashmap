@@ -21,7 +21,6 @@ abstract class SimpleHashMapBaseEnv(
 ) : AutoCloseable
 {
     companion object {
-        const val MAX_RETRIES = 1000
         const val MAX_DISTANCE = 1024
 
         fun getHashmapFilename(version: Long) = "hashmap_$version.data"
@@ -32,7 +31,6 @@ abstract class SimpleHashMapBaseEnv(
 
 class SimpleHashMapROEnv_K_V (
         dir: VersionedDirectory,
-        val bucketLayout: BucketLayout_K_V,
         collectStats: Boolean
 ) : SimpleHashMapBaseEnv(dir, collectStats) {
 
@@ -147,7 +145,7 @@ class SimpleHashMapEnv_K_V private constructor(
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv_K_V {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
-            return SimpleHashMapROEnv_K_V(dir, bucketLayout, collectStats)
+            return SimpleHashMapROEnv_K_V(dir, collectStats)
         }
 
         fun createAnonymousDirect(): SimpleHashMapEnv_K_V {
