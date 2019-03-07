@@ -4,14 +4,19 @@ import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 
+import org.agrona.concurrent.AtomicBuffer
+import org.agrona.concurrent.UnsafeBuffer
+
 class VersionedRamDirectory private constructor(
         private val bufferAllocator: (Int) -> ByteBuffer
 ) : AbstractVersionedDirectory(
-        bufferAllocator(VersionedDirectory.VERSION_LENGTH)
-                .order(VersionedDirectory.BYTE_ORDER)
+        UnsafeBuffer(
+                bufferAllocator(VersionedDirectory.VERSION_LENGTH)
+                        .order(VersionedDirectory.BYTE_ORDER)
+        )
 ) {
 
-    private val buffers = ConcurrentHashMap<String, ByteBuffer>()
+    private val buffers = ConcurrentHashMap<String, AtomicBuffer>()
 
     companion object {
         private val HEAP_ALLOCATOR = ByteBuffer::allocate
@@ -26,26 +31,21 @@ class VersionedRamDirectory private constructor(
         }
     }
 
-    override fun createFile(name: String, size: Int): ByteBuffer {
-        val buffer = bufferAllocator(size)
-                .order(VersionedDirectory.BYTE_ORDER)
+    override fun createFile(name: String, size: Int): AtomicBuffer {
+        val buffer = UnsafeBuffer(
+                bufferAllocator(size)
+                        .order(VersionedDirectory.BYTE_ORDER)
+        )
         buffers[name] = buffer
         return buffer
     }
 
-    override fun openFileWritable(name: String): ByteBuffer {
-        return (buffers[name] ?: throw FileDoesNotExistException(Paths.get(name)))
-                .duplicate()
-                .clear()
-                .order(VersionedDirectory.BYTE_ORDER)
+    override fun openFileWritable(name: String): AtomicBuffer {
+        return buffers[name] ?: throw FileDoesNotExistException(Paths.get(name))
     }
 
-    override fun openFileReadOnly(name: String): ByteBuffer {
-        return (buffers[name] ?: throw FileDoesNotExistException(Paths.get(name)))
-                .duplicate()
-                .clear()
-                .order(VersionedDirectory.BYTE_ORDER)
-                .asReadOnlyBuffer()
+    override fun openFileReadOnly(name: String): AtomicBuffer {
+        return buffers[name] ?: throw FileDoesNotExistException(Paths.get(name))
     }
 
     override fun deleteFile(name: String) {

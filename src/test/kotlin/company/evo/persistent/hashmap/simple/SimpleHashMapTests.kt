@@ -42,11 +42,11 @@ class SimpleHashMapTests : StringSpec() {
             map.size() shouldBe 4
 
             map.remove(5) shouldBe true
-            map.tombstones() shouldBe 0
+            map.tombstones() shouldBe 1
             map.size() shouldBe 3
 
             map.remove(5) shouldBe false
-            map.tombstones() shouldBe 0
+            map.tombstones() shouldBe 1
             map.size() shouldBe 3
 
             map.put(6, 1.6F) shouldBe PutResult.OK
@@ -99,8 +99,8 @@ class SimpleHashMapTests : StringSpec() {
             map.capacity shouldBe 7
 
             map.put(0, 1.0F)
-            map.put(1, 1.1F)
-            map.put(2, 1.2F)
+            map.put(7, 1.7F)
+            map.put(9, 1.9F)
             map.tombstones() shouldBe 0
             map.size() shouldBe 3
 
@@ -108,11 +108,11 @@ class SimpleHashMapTests : StringSpec() {
             map.tombstones() shouldBe 1
             map.size() shouldBe 2
 
-            map.remove(1)
+            map.remove(7)
             map.tombstones() shouldBe 2
             map.size() shouldBe 1
 
-            map.remove(2)
+            map.remove(9)
             map.tombstones() shouldBe 0
             map.size() shouldBe 0
         }
@@ -217,12 +217,11 @@ class SimpleHashMapTests : StringSpec() {
     companion object {
         private fun createMap(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap_K_V {
-            val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
-            val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, bucketLayout.size)
+        ): SimpleHashMap_Int_Float {
+            val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
-            SimpleHashMap_K_V.initBuffer(UnsafeBuffer(buffer), bucketLayout, mapInfo)
-            return SimpleHashMapImpl_K_V(0L, UnsafeBuffer(buffer), bucketLayout)
+            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
+            return SimpleHashMapImpl_Int_Float(0L, UnsafeBuffer(buffer))
         }
     }
 }

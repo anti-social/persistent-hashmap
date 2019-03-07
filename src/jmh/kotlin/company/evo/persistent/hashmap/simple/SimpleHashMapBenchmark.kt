@@ -16,16 +16,14 @@ import org.openjdk.jmh.infra.Blackhole
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
     open class SimpleHashMapState : BaseState() {
-        var map: SimpleHashMapImpl_K_V? = null
-        var i = 0
+        var map: SimpleHashMapImpl_Int_Float? = null
 
         @Setup(Level.Trial)
         fun initMap() {
-            val bucketLayout = SimpleHashMap_K_V.bucketLayout_K_V()
-            val mapInfo = MapInfo.calcFor(entries, 0.5, bucketLayout.size)
+            val mapInfo = MapInfo.calcFor(entries, 0.5, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
-            SimpleHashMap_K_V.initBuffer(UnsafeBuffer(buffer), bucketLayout, mapInfo)
-            map = SimpleHashMapImpl_K_V(0L, UnsafeBuffer(buffer), bucketLayout, DefaultStatsCollector())
+            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
+            map = SimpleHashMapImpl_Int_Float(0L, UnsafeBuffer(buffer), DefaultStatsCollector())
 
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)
@@ -37,10 +35,9 @@ open class SimpleHashMapBenchmark {
         @TearDown
         fun printStats() {
             println()
-            println("======== Map Info ========")
+            println("======== Map Info =========")
             println(map?.toString())
-            println("===========================")
-            println("======== Map Stats ========")
+            println("======== Get Stats ========")
             println(map?.stats())
             println("===========================")
         }
@@ -49,11 +46,6 @@ open class SimpleHashMapBenchmark {
     @Benchmark
     @Threads(1)
     open fun benchmark_1_reader(state: SimpleHashMapState, blackhole: Blackhole) {
-        // blackhole.consume(
-        //         state.map.get(BaseState.intKeys[state.i], 0.0F)
-        // )
-        // state.i++
-        // state.i = state.i and BaseState.IX_MASK
         val map = state.map
         for (ix in BaseState.ixs) {
             blackhole.consume(

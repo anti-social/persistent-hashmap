@@ -71,7 +71,6 @@ val test by tasks.getting(Test::class) {
 
 configure<JcstressPluginExtension> {
     jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
-
 }
 
 jmh {

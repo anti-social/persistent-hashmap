@@ -1,9 +1,11 @@
 package company.evo.persistent
 
 import java.io.Closeable
-import java.nio.ByteBuffer
+// import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Path
+
+import org.agrona.concurrent.AtomicBuffer
 
 open class VersionedDirectoryException(
         msg: String, cause: Exception? = null
@@ -19,9 +21,9 @@ class FileDoesNotExistException(path: Path) : VersionedDirectoryException("Canno
 interface VersionedDirectory : Closeable {
     fun readVersion(): Long
     fun writeVersion(version: Long)
-    fun createFile(name: String, size: Int): ByteBuffer
-    fun openFileWritable(name: String): ByteBuffer
-    fun openFileReadOnly(name: String): ByteBuffer
+    fun createFile(name: String, size: Int): AtomicBuffer
+    fun openFileWritable(name: String): AtomicBuffer
+    fun openFileReadOnly(name: String): AtomicBuffer
     fun deleteFile(name: String)
 
     companion object {
@@ -31,13 +33,13 @@ interface VersionedDirectory : Closeable {
 }
 
 abstract class AbstractVersionedDirectory(
-        private val versionBuffer: ByteBuffer
+        private val versionBuffer: AtomicBuffer
 ) : VersionedDirectory {
 
-    override fun readVersion() = versionBuffer.getLong(0)
+    override fun readVersion() = versionBuffer.getLongVolatile(0)
 
     override fun writeVersion(version: Long) {
-        versionBuffer.putLong(0, version)
+        versionBuffer.putLongVolatile(0, version)
     }
 
     override fun close() {}
