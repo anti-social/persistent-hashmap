@@ -413,25 +413,20 @@ open class SimpleHashMapROImpl_Int_Float
     }
 
     override fun get(key: K, defaultValue: V): V {
-        val hash = SimpleHashMap_Int_Float.keySerializer.hash(key)
         find(
-               hash,
-               maybeFound = { _, bucketOffset, meta, dist ->
+               key,
+               found = { _, bucketOffset, meta, dist ->
                    var m = meta
                    var value: V
                    while (true) {
-                       value = if (key == readKey(bucketOffset)) {
-                           readValue(bucketOffset)
-                       } else {
-                           return@find false
-                       }
+                       value = readValue(bucketOffset)
                        val meta2 = readBucketMeta(bucketOffset)
                        if (m == meta2) {
                            break
                        }
                        m = meta2
                        if (!isBucketOccupied(m)) {
-                           return@find false
+                           return defaultValue
                        }
                    }
                    statsCollector.addGet(true, dist)
@@ -446,10 +441,11 @@ open class SimpleHashMapROImpl_Int_Float
     }
 
     protected inline fun find(
-            hash: Int,
-            maybeFound: (bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int) -> Boolean,
+            key: K,
+            found: (bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int) -> Unit,
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
+        val hash = SimpleHashMap_Int_Float.keySerializer.hash(key)
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
@@ -466,10 +462,11 @@ open class SimpleHashMapROImpl_Int_Float
             }
             if (isBucketFree(meta) || dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
                 notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
-                return
+                break
             }
-            if (maybeFound(bucketIx, bucketOffset, meta, dist)) {
-                return
+            if (key == readKey(bucketOffset)) {
+                found(bucketIx, bucketOffset, meta, dist)
+                break
             }
         } while (true)
     }
@@ -487,24 +484,16 @@ class SimpleHashMapImpl_Int_Float
         statsCollector
 ) {
     override fun put(key: K, value: V): PutResult {
-        val hash = SimpleHashMap_Int_Float.keySerializer.hash(key)
         find(
-                hash,
-                maybeFound = { _, bucketOffset, _, _ ->
-                    when (key) {
-                        readKey(bucketOffset) -> {
-                            writeValue(bucketOffset, value)
-                            true
-                        }
-                        else -> {
-                            false
-                        }
-                    }
+                key,
+                found = { _, bucketOffset, _, _ ->
+                    writeValue(bucketOffset, value)
+                    return PutResult.OK
                 },
                 notFound = { bucketOffset, meta, tombstoneOffset, tombstoneMeta, dist ->
-                   if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
-                       return PutResult.OVERFLOW
-                   }
+                    if (dist > SimpleHashMapBaseEnv.MAX_DISTANCE) {
+                        return PutResult.OVERFLOW
+                    }
                     if (size() >= header.maxEntries) {
                         return PutResult.OVERFLOW
                     }
@@ -524,32 +513,24 @@ class SimpleHashMapImpl_Int_Float
     }
 
     override fun remove(key: K): Boolean {
-        val hash = SimpleHashMap_Int_Float.keySerializer.hash(key)
         find(
-                hash,
-                maybeFound = { bucketIx, bucketOffset, meta, _ ->
-                    when (key) {
-                        readKey(bucketOffset) -> {
-                            val nextBucketIx = nextBucketIx(bucketIx)
-                            val nextBucketPageOffset = getPageOffset(nextBucketIx)
-                            val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
-                            val nextMeta = readBucketMeta(nextBucketOffset)
+                key,
+                found = { bucketIx, bucketOffset, meta, _ ->
+                    val nextBucketIx = nextBucketIx(bucketIx)
+                    val nextBucketPageOffset = getPageOffset(nextBucketIx)
+                    val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
+                    val nextMeta = readBucketMeta(nextBucketOffset)
 
-                            if (isBucketFree(nextMeta)) {
-                                writeBucketMeta(bucketOffset, SimpleHashMap_Int_Float.META_FREE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones() - cleanupTombstones(bucketIx))
-                                writeSize(size() - 1)
-                            } else {
-                                writeBucketMeta(bucketOffset, SimpleHashMap_Int_Float.META_TOMBSTONE, bucketVersion(meta) + 1)
-                                writeTombstones(tombstones() + 1)
-                                writeSize(size() - 1)
-                            }
-                            return true
-                        }
-                        else -> {
-                            false
-                        }
+                    if (isBucketFree(nextMeta)) {
+                        writeBucketMeta(bucketOffset, SimpleHashMap_Int_Float.META_FREE, bucketVersion(meta) + 1)
+                        writeTombstones(tombstones() - cleanupTombstones(bucketIx))
+                        writeSize(size() - 1)
+                    } else {
+                        writeBucketMeta(bucketOffset, SimpleHashMap_Int_Float.META_TOMBSTONE, bucketVersion(meta) + 1)
+                        writeTombstones(tombstones() + 1)
+                        writeSize(size() - 1)
                     }
+                    return true
                 },
                 notFound = { _, _, _, _, _ ->
                     return false
