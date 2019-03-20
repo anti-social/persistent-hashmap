@@ -120,19 +120,29 @@ interface SimpleHashMapRO_Int_Float {
     fun dump(dumpContent: Boolean): String
 
     companion object {
-        fun fromEnv(env: SimpleHashMapROEnv_Int_Float, buffer: AtomicBuffer): SimpleHashMapRO_Int_Float {
+        fun create(
+                ver: Long, buffer: AtomicBuffer, collectStats: Boolean = false
+        ): SimpleHashMapRO_Int_Float {
             return SimpleHashMapROImpl_Int_Float(
-                    env.getCurrentVersion(),
+                    ver,
                     buffer,
-                    if (env.collectStats) DefaultStatsCollector() else DummyStatsCollector()
+                    if (collectStats) DefaultStatsCollector() else DummyStatsCollector()
             )
         }
     }
 }
 
+
+interface SimpleHashMapIterator_Int_Float {
+    fun next(): Boolean
+    fun key(): Int
+    fun value(): Float
+}
+
 interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
+    fun iterator(): SimpleHashMapIterator_Int_Float
 
     companion object {
         const val DATA_PAGE_HEADER_SIZE = 16
@@ -159,11 +169,8 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
             header.dump(buffer)
         }
 
-        fun fromEnv(env: SimpleHashMapEnv_Int_Float, buffer: AtomicBuffer): SimpleHashMap_Int_Float {
-            return SimpleHashMapImpl_Int_Float(
-                    env.getCurrentVersion(),
-                    buffer
-            )
+        fun create(ver: Long, buffer: AtomicBuffer): SimpleHashMap_Int_Float {
+            return SimpleHashMapImpl_Int_Float(ver, buffer)
         }
     }
 
@@ -278,6 +285,7 @@ open class SimpleHashMapROImpl_Int_Float
     // FIXME
     override val maxEntries = header.maxEntries
     override val capacity = header.capacity
+
     override fun size() = readSize()
     override fun tombstones() = readTombstones()
 
@@ -470,7 +478,6 @@ open class SimpleHashMapROImpl_Int_Float
             }
         } while (true)
     }
-
 }
 
 class SimpleHashMapImpl_Int_Float
@@ -483,6 +490,42 @@ class SimpleHashMapImpl_Int_Float
         buffer,
         statsCollector
 ) {
+    inner class Iterator : SimpleHashMapIterator_Int_Float {
+        private var curBucketIx = -1
+        private var curBucketOffset = -1
+
+        override fun next(): Boolean {
+            while (true) {
+                curBucketIx++
+                if (curBucketIx >= capacity) {
+                    return false
+                }
+                val pageOffset = getPageOffset(curBucketIx)
+                val bucketOffset = getBucketOffset(pageOffset, curBucketIx)
+                if (isBucketOccupied(readBucketMeta(bucketOffset))) {
+                    curBucketOffset = bucketOffset
+                    return true
+                }
+            }
+        }
+        override fun key(): Int {
+            if (curBucketIx >= capacity) {
+                throw IndexOutOfBoundsException()
+            }
+            return readKey(curBucketOffset)
+        }
+        override fun value(): Float {
+            if (curBucketIx >= capacity) {
+                throw IndexOutOfBoundsException()
+            }
+            return readValue(curBucketOffset)
+        }
+    }
+
+    override fun iterator(): SimpleHashMapIterator_Int_Float {
+        return Iterator()
+    }
+
     override fun put(key: K, value: V): PutResult {
         find(
                 key,
