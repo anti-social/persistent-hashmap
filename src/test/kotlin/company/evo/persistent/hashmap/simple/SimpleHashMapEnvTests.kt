@@ -12,6 +12,7 @@ class SimpleHashMapEnvTests : FunSpec() {
         test("env: single writer, multiple readers") {
             withTempDir { tmpDir ->
                 SimpleHashMapEnv_Int_Float.Builder()
+                        .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
@@ -39,6 +40,7 @@ class SimpleHashMapEnvTests : FunSpec() {
         test("env: copy map") {
             withTempDir { tmpDir ->
                 SimpleHashMapEnv_Int_Float.Builder()
+                        .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
                             val map = env.openMap()

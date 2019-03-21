@@ -106,7 +106,7 @@ class DefaultStatsCollector : StatsCollector() {
     }
 }
 
-interface SimpleHashMapRO_Int_Float {
+interface SimpleHashMapRO_Int_Float : AutoCloseable {
     val version: Long
     val maxEntries: Int
     val capacity: Int
@@ -312,6 +312,10 @@ open class SimpleHashMapROImpl_Int_Float
             return "$description\n$content"
         }
         return description
+    }
+
+    override fun close() {
+        TODO("not implemented")
     }
 
     protected fun isBucketFree(meta: Int) = (meta and SimpleHashMap_Int_Float.META_TAG_MASK) == 0

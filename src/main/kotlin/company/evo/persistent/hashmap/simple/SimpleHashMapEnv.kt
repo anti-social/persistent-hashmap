@@ -5,6 +5,8 @@ import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
 import company.evo.persistent.FileDoesNotExistException
+import company.evo.persistent.MappedFile
+import company.evo.persistent.RefCounted
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
@@ -33,7 +35,7 @@ class SimpleHashMapROEnv_Int_Float (
 
     private data class VersionedFile(
             val version: Long,
-            val buffer: AtomicBuffer
+            val file: RefCounted<MappedFile>
     )
 
     private val lock = ReentrantLock()
@@ -82,7 +84,7 @@ class SimpleHashMapROEnv_Int_Float (
             }
         }
 
-        return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.buffer, collectStats)
+        return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file.acquire().buffer, collectStats)
     }
 
     override fun close() {}
@@ -130,8 +132,14 @@ class SimpleHashMapEnv_Int_Float private constructor(
             this.collectStats = collectStats
         }
 
+        var useUnmapHack: Boolean = false
+        fun useUnmapHack(useUnmapHack: Boolean) = apply {
+            this.useUnmapHack = useUnmapHack
+        }
+
         fun open(path: Path): SimpleHashMapEnv_Int_Float {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
+            dir.useUnmapHack = useUnmapHack
             return if (dir.created) {
                 create(dir)
             } else {
@@ -141,11 +149,13 @@ class SimpleHashMapEnv_Int_Float private constructor(
 
         fun openReadOnly(path: Path): SimpleHashMapROEnv_Int_Float {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
+            dir.useUnmapHack = useUnmapHack
             return SimpleHashMapROEnv_Int_Float(dir, collectStats)
         }
 
         fun createAnonymousDirect(): SimpleHashMapEnv_Int_Float {
             val dir = VersionedRamDirectory.createDirect()
+            dir.useUnmapHack = useUnmapHack
             return create(dir)
         }
 
@@ -160,8 +170,9 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mapInfo = MapInfo.calcFor(
                     initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
             )
-            val mapBuffer = dir.createFile(filename, mapInfo.bufferSize)
-            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mapBuffer), mapInfo)
+            val mappedFile = dir.createFile(filename, mapInfo.bufferSize)
+            val mappedBuffer = mappedFile.acquire().buffer
+            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mappedBuffer), mapInfo)
             return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
         }
 
@@ -173,7 +184,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
     fun openMap(): SimpleHashMap_Int_Float {
         val ver = dir.readVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return SimpleHashMap_Int_Float.create(ver, UnsafeBuffer(mapBuffer))
+        return SimpleHashMap_Int_Float.create(ver, mapBuffer.acquire().buffer)
     }
 
     fun copyMap(map: SimpleHashMap_Int_Float): SimpleHashMap_Int_Float {
@@ -183,12 +194,13 @@ class SimpleHashMapEnv_Int_Float private constructor(
                 newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
         )
         // TODO Write into temporary file then rename
-        val mapBuffer = dir.createFile(
+        val mappedFile = dir.createFile(
                 getHashmapFilename(newVersion), mapInfo.bufferSize
         )
-        map.header.dump(mapBuffer)
+        val mappedBuffer = mappedFile.acquire().buffer
+        map.header.dump(mappedBuffer)
         // TODO Really copy map data
-        val newMap = SimpleHashMap_Int_Float.create(newVersion, mapBuffer)
+        val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedBuffer)
         val iterator = map.iterator()
         while (iterator.next()) {
             newMap.put(iterator.key(), iterator.value())

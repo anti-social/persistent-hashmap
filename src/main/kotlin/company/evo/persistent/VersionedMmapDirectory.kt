@@ -7,29 +7,44 @@ import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Path
 
-import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.UnsafeBuffer
+
 
 class VersionedMmapDirectory private constructor(
         val path: Path,
         val versionFilename: String,
-        versionBuffer: AtomicBuffer,
+        private val versionFile: MappedFile,
         private val writeLock: FileLock? = null,
         val created: Boolean = false
-) : AbstractVersionedDirectory(versionBuffer) {
+) : AbstractVersionedDirectory(versionFile.buffer) {
+
+    val versionPath = getVersionPath(path, versionFilename)
+
+    private var bufferCleaner: (MappedFile) -> Unit = {}
+    var useUnmapHack = false
+        set(useUnmapHack) {
+            if (useUnmapHack && BufferCleaner.BUFFER_CLEANER == null) {
+                throw IllegalArgumentException(BufferCleaner.UNMAP_NOT_SUPPORTED_REASON)
+            }
+            field = useUnmapHack
+            bufferCleaner = { file ->
+                BufferCleaner.BUFFER_CLEANER?.clean(file.rawBuffer)
+            }
+        }
+
     companion object {
         private fun getVersionPath(path: Path, versionFilename: String): Path {
             return path.resolve(versionFilename)
         }
 
-        private fun getVersionBuffer(versionPath: Path, mode: Mode): AtomicBuffer {
-            val versionBuffer = mmapFile(versionPath, mode)
-            if (versionBuffer.capacity() != VersionedDirectory.VERSION_LENGTH) {
+        private fun getVersionFile(versionPath: Path, mode: Mode): MappedFile {
+            val versionFile = mmapFile(versionPath, mode)
+            if (versionFile.buffer.capacity() != VersionedDirectory.VERSION_LENGTH) {
                 throw CorruptedVersionFileException(
                         "Version file must have size ${VersionedDirectory.VERSION_LENGTH}"
                 )
             }
-            return versionBuffer
+            return versionFile
         }
 
         private fun acquireLock(versionPath: Path): FileLock {
@@ -48,14 +63,14 @@ class VersionedMmapDirectory private constructor(
 
         fun openWritable(path: Path, versionFilename: String): VersionedMmapDirectory {
             val versionPath = getVersionPath(path, versionFilename)
-            val (versionBuffer, created) = if (!versionPath.toFile().exists()) {
-                getVersionBuffer(versionPath, Mode.Create(VersionedDirectory.VERSION_LENGTH)) to true
+            val (versionFile, created) = if (!versionPath.toFile().exists()) {
+                getVersionFile(versionPath, Mode.Create(VersionedDirectory.VERSION_LENGTH)) to true
             } else {
-                getVersionBuffer(versionPath, Mode.OpenRW()) to false
+                getVersionFile(versionPath, Mode.OpenRW()) to false
             }
             val versionLock = acquireLock(versionPath)
             return VersionedMmapDirectory(
-                    path, versionFilename, versionBuffer, versionLock, created = created
+                    path, versionFilename, versionFile, versionLock, created = created
             )
         }
 
@@ -64,11 +79,11 @@ class VersionedMmapDirectory private constructor(
             if (!versionPath.toFile().exists()) {
                 throw FileDoesNotExistException(versionPath)
             }
-            val versionBuffer = getVersionBuffer(versionPath, Mode.OpenRO())
-            return VersionedMmapDirectory(path, versionFilename, versionBuffer)
+            val versionFile = getVersionFile(versionPath, Mode.OpenRO())
+            return VersionedMmapDirectory(path, versionFilename, versionFile)
         }
 
-        private fun mmapFile(filepath: Path, mode: Mode): AtomicBuffer {
+        private fun mmapFile(filepath: Path, mode: Mode): MappedFile {
             return RandomAccessFile(filepath.toString(), mode.mode).use { file ->
                 if (mode is Mode.Create) {
                     file.setLength(mode.size.toLong())
@@ -78,9 +93,10 @@ class VersionedMmapDirectory private constructor(
                             .map(mode.mapMode, 0, channel.size())
                             .order(ByteOrder.nativeOrder())
                 }
-                UnsafeBuffer(mappedBuffer)
+                MappedFile(UnsafeBuffer(mappedBuffer), mappedBuffer)
             }
         }
+
     }
 
     private sealed class Mode(val mode: String, val mapMode: FileChannel.MapMode) {
@@ -91,35 +107,34 @@ class VersionedMmapDirectory private constructor(
 
     override fun close() {
         super.close()
+        bufferCleaner(versionFile)
         writeLock?.close()
     }
 
-    val versionPath = getVersionPath(path, versionFilename)
-
-    override fun createFile(name: String, size: Int): AtomicBuffer {
+    override fun createFile(name: String, size: Int): RefCounted<MappedFile> {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (filepath.toFile().exists()) {
             throw FileAlreadyExistsException(filepath)
         }
-        return mmapFile(filepath, Mode.Create(size))
+        return AtomicRefCounted(mmapFile(filepath, Mode.Create(size)), bufferCleaner)
     }
 
-    override fun openFileWritable(name: String): AtomicBuffer {
+    override fun openFileWritable(name: String): RefCounted<MappedFile> {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException(filepath)
         }
-        return mmapFile(filepath, Mode.OpenRW())
+        return AtomicRefCounted(mmapFile(filepath, Mode.OpenRW()), bufferCleaner)
     }
 
-    override fun openFileReadOnly(name: String): AtomicBuffer {
+    override fun openFileReadOnly(name: String): RefCounted<MappedFile> {
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException(filepath)
         }
-        return mmapFile(filepath, Mode.OpenRO())
+        return AtomicRefCounted(mmapFile(filepath, Mode.OpenRO()), bufferCleaner)
     }
 
     override fun deleteFile(name: String) {

@@ -28,9 +28,11 @@ class RefCountedTests : StringSpec() {
 
             v shouldBe 0
             rc.release()
-            rc.count() shouldBe 0
             v shouldBe 100
 
+            shouldThrow<IllegalStateException> {
+                rc.acquire()
+            }
             shouldThrow<IllegalStateException> {
                 rc.release()
             }
