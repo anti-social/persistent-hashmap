@@ -43,38 +43,43 @@ class SimpleHashMapEnvTests : FunSpec() {
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
-                            val map = env.openMap()
-                            map.put(1, 1.1F) shouldBe PutResult.OK
-                            map.put(2, 1.2F) shouldBe PutResult.OK
-                            env.getCurrentVersion() shouldBe 0L
+                            env.openMap().use { map ->
+                                map.put(1, 1.1F) shouldBe PutResult.OK
+                                map.put(2, 1.2F) shouldBe PutResult.OK
+                                env.getCurrentVersion() shouldBe 0L
 
-                            val mapV0 = SimpleHashMapEnv_Int_Float.Builder()
-                                    .openReadOnly(tmpDir)
-                                    .use { roEnv ->
-                                        roEnv.getCurrentVersion() shouldBe 0L
-                                        roEnv.getCurrentMap()
-                                    }
+                                val mapV0 = SimpleHashMapEnv_Int_Float.Builder()
+                                        .openReadOnly(tmpDir)
+                                        .use { roEnv ->
+                                            roEnv.getCurrentVersion() shouldBe 0L
+                                            roEnv.getCurrentMap()
+                                        }
 
-                            val newMap = env.copyMap(map)
-                            env.getCurrentVersion() shouldBe 1L
-                            newMap.put(3, 1.3F) shouldBe PutResult.OK
+                                env.copyMap(map).use { newMap ->
+                                    env.getCurrentVersion() shouldBe 1L
+                                    newMap.put(3, 1.3F) shouldBe PutResult.OK
+                                }
 
-                            val mapV1 = SimpleHashMapEnv_Int_Float.Builder()
-                                    .openReadOnly(tmpDir)
-                                    .use { roEnv ->
-                                        roEnv.getCurrentVersion() shouldBe 1L
-                                        roEnv.getCurrentMap()
-                                    }
+                                val mapV1 = SimpleHashMapEnv_Int_Float.Builder()
+                                        .openReadOnly(tmpDir)
+                                        .use { roEnv ->
+                                            roEnv.getCurrentVersion() shouldBe 1L
+                                            roEnv.getCurrentMap()
+                                        }
 
-                            mapV0.version shouldBe 0L
-                            mapV0.get(1, 0.0F) shouldBe 1.1F
-                            mapV0.get(2, 0.0F) shouldBe 1.2F
-                            mapV0.get(3, 0.0F) shouldBe 0.0F
+                                mapV0.version shouldBe 0L
+                                mapV0.get(1, 0.0F) shouldBe 1.1F
+                                mapV0.get(2, 0.0F) shouldBe 1.2F
+                                mapV0.get(3, 0.0F) shouldBe 0.0F
 
-                            mapV1.version shouldBe 1L
-                            mapV1.get(1, 0.0F) shouldBe 1.1F
-                            mapV1.get(2, 0.0F) shouldBe 1.2F
-                            mapV1.get(3, 0.0F) shouldBe 1.3F
+                                mapV1.version shouldBe 1L
+                                mapV1.get(1, 0.0F) shouldBe 1.1F
+                                mapV1.get(2, 0.0F) shouldBe 1.2F
+                                mapV1.get(3, 0.0F) shouldBe 1.3F
+
+                                mapV0.close()
+                                mapV1.close()
+                            }
                         }
             }
         }

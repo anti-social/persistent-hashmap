@@ -84,7 +84,7 @@ class SimpleHashMapROEnv_Int_Float (
             }
         }
 
-        return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file.acquire().buffer, collectStats)
+        return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file, collectStats)
     }
 
     override fun close() {}
@@ -184,7 +184,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
     fun openMap(): SimpleHashMap_Int_Float {
         val ver = dir.readVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return SimpleHashMap_Int_Float.create(ver, mapBuffer.acquire().buffer)
+        return SimpleHashMap_Int_Float.create(ver, mapBuffer)
     }
 
     fun copyMap(map: SimpleHashMap_Int_Float): SimpleHashMap_Int_Float {
@@ -197,10 +197,10 @@ class SimpleHashMapEnv_Int_Float private constructor(
         val mappedFile = dir.createFile(
                 getHashmapFilename(newVersion), mapInfo.bufferSize
         )
-        val mappedBuffer = mappedFile.acquire().buffer
+        val mappedBuffer = mappedFile.get().buffer
         map.header.dump(mappedBuffer)
         // TODO Really copy map data
-        val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedBuffer)
+        val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
         val iterator = map.iterator()
         while (iterator.next()) {
             newMap.put(iterator.key(), iterator.value())

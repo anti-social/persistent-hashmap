@@ -4,8 +4,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 interface RefCounted<T> {
     fun count(): Long
+    fun get(): T
     fun acquire(): T
-    fun release()
+    fun release(): Boolean
 }
 
 class AtomicRefCounted<T>(
@@ -19,17 +20,24 @@ class AtomicRefCounted<T>(
         return count.get()
     }
 
+    override fun get(): T {
+        ensureAlive()
+        return value
+    }
+
     override fun acquire(): T {
         ensureAlive()
         count.incrementAndGet()
         return value
     }
 
-    override fun release() {
+    override fun release(): Boolean {
         ensureAlive()
         if (count.decrementAndGet() == 0L) {
             drop(value)
+            return true
         }
+        return false
     }
 
     private fun ensureAlive() {

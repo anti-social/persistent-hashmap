@@ -1,5 +1,7 @@
 package company.evo.persistent.hashmap.simple
 
+import company.evo.persistent.MappedFile
+import company.evo.persistent.RefCounted
 import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
@@ -121,11 +123,11 @@ interface SimpleHashMapRO_Int_Float : AutoCloseable {
 
     companion object {
         fun create(
-                ver: Long, buffer: AtomicBuffer, collectStats: Boolean = false
+                ver: Long, file: RefCounted<MappedFile>, collectStats: Boolean = false
         ): SimpleHashMapRO_Int_Float {
             return SimpleHashMapROImpl_Int_Float(
                     ver,
-                    buffer,
+                    file,
                     if (collectStats) DefaultStatsCollector() else DummyStatsCollector()
             )
         }
@@ -169,8 +171,8 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
             header.dump(buffer)
         }
 
-        fun create(ver: Long, buffer: AtomicBuffer): SimpleHashMap_Int_Float {
-            return SimpleHashMapImpl_Int_Float(ver, buffer)
+        fun create(ver: Long, file: RefCounted<MappedFile>): SimpleHashMap_Int_Float {
+            return SimpleHashMapImpl_Int_Float(ver, file)
         }
     }
 
@@ -268,9 +270,12 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
 open class SimpleHashMapROImpl_Int_Float
 @JvmOverloads constructor(
         override val version: Long,
-        protected val buffer: AtomicBuffer,
-        protected val statsCollector: StatsCollector = DummyStatsCollector()
+        private val file: RefCounted<MappedFile>,
+        private val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_Int_Float {
+
+    private val buffer = file.acquire()
+            .buffer
 
     init {
         assert(buffer.capacity() % PAGE_SIZE == 0) {
@@ -285,6 +290,10 @@ open class SimpleHashMapROImpl_Int_Float
     // FIXME
     override val maxEntries = header.maxEntries
     override val capacity = header.capacity
+
+    override fun close() {
+        file.release()
+    }
 
     override fun size() = readSize()
     override fun tombstones() = readTombstones()
@@ -312,10 +321,6 @@ open class SimpleHashMapROImpl_Int_Float
             return "$description\n$content"
         }
         return description
-    }
-
-    override fun close() {
-        TODO("not implemented")
     }
 
     protected fun isBucketFree(meta: Int) = (meta and SimpleHashMap_Int_Float.META_TAG_MASK) == 0
@@ -438,6 +443,7 @@ open class SimpleHashMapROImpl_Int_Float
                        }
                        m = meta2
                        if (!isBucketOccupied(m)) {
+                           statsCollector.addGet(false, dist)
                            return defaultValue
                        }
                    }
@@ -461,7 +467,7 @@ open class SimpleHashMapROImpl_Int_Float
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
-        do {
+        while(true) {
             dist++
             val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
@@ -480,18 +486,18 @@ open class SimpleHashMapROImpl_Int_Float
                 found(bucketIx, bucketOffset, meta, dist)
                 break
             }
-        } while (true)
+        }
     }
 }
 
 class SimpleHashMapImpl_Int_Float
 @JvmOverloads constructor(
         version: Long,
-        buffer: AtomicBuffer,
+        file: RefCounted<MappedFile>,
         statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMap_Int_Float, SimpleHashMapROImpl_Int_Float(
         version,
-        buffer,
+        file,
         statsCollector
 ) {
     inner class Iterator : SimpleHashMapIterator_Int_Float {

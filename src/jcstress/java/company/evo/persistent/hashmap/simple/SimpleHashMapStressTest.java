@@ -1,12 +1,17 @@
 package company.evo.persistent.hashmap.simple;
 
+import company.evo.persistent.AtomicRefCounted;
+import company.evo.persistent.MappedFile;
+
+import org.agrona.concurrent.UnsafeBuffer;
+
 import org.openjdk.jcstress.annotations.*;
 import org.openjdk.jcstress.infra.results.FFFF_Result;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.agrona.concurrent.UnsafeBuffer;
+import kotlin.Unit;
 
 @JCStressTest
 @Outcome(id = "108.0, 108.0, 108.0, 108.0", expect = Expect.ACCEPTABLE, desc = "Ok")
@@ -22,15 +27,21 @@ public class SimpleHashMapStressTest {
         );
         ByteBuffer buffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize()).order(ByteOrder.nativeOrder());
         SimpleHashMap_Int_Float.Companion.initBuffer(new UnsafeBuffer(buffer), mapInfo);
+        MappedFile file = new MappedFile(new UnsafeBuffer(buffer), buffer);
         map = new SimpleHashMapImpl_Int_Float(
-                0L, new UnsafeBuffer(buffer), new DummyStatsCollector()
+                0L,
+                new AtomicRefCounted<>(file, (f) -> Unit.INSTANCE),
+                new DummyStatsCollector()
         );
         assert map.getCapacity() == 7;
         map.put(-6, -106);
         map.put(8, 108);
         ByteBuffer roBuffer = buffer.duplicate().clear().order(ByteOrder.nativeOrder());
+        MappedFile roFile = new MappedFile(new UnsafeBuffer(roBuffer), roBuffer);
         mapRO = new SimpleHashMapROImpl_Int_Float(
-                0L, new UnsafeBuffer(roBuffer), new DummyStatsCollector()
+                0L,
+                new AtomicRefCounted<>(roFile, (f) -> Unit.INSTANCE),
+                new DummyStatsCollector()
         );
     }
 
