@@ -2,8 +2,10 @@ package company.evo.persistent
 
 import java.util.concurrent.atomic.AtomicLong
 
+class IllegalRefCountException() : Exception()
+
 interface RefCounted<T> {
-    fun count(): Long
+    fun refCount(): Long
     fun get(): T
     fun acquire(): T
     fun release(): Boolean
@@ -13,11 +15,11 @@ class AtomicRefCounted<T>(
         private val value: T,
         private val drop: (v: T) -> Unit
 ) : RefCounted<T> {
-    private val count = AtomicLong(1)
+    private val rc = AtomicLong(1)
 
-    override fun count(): Long {
+    override fun refCount(): Long {
         ensureAlive()
-        return count.get()
+        return rc.get()
     }
 
     override fun get(): T {
@@ -26,14 +28,16 @@ class AtomicRefCounted<T>(
     }
 
     override fun acquire(): T {
-        ensureAlive()
-        count.incrementAndGet()
+        val oldRc = rc.getAndIncrement()
+        if (oldRc == 0L) {
+            
+        }
         return value
     }
 
     override fun release(): Boolean {
         ensureAlive()
-        if (count.decrementAndGet() == 0L) {
+        if (rc.decrementAndGet() == 0L) {
             drop(value)
             return true
         }
@@ -41,7 +45,7 @@ class AtomicRefCounted<T>(
     }
 
     private fun ensureAlive() {
-        if (count.get() == 0L) {
+        if (rc.get() == 0L) {
             throw IllegalStateException("Have been already dropped")
         }
     }

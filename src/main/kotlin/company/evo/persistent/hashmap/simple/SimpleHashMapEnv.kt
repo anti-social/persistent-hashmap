@@ -13,6 +13,7 @@ import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.PRIMES
 import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.UnsafeBuffer
+import java.lang.IllegalStateException
 
 abstract class SimpleHashMapBaseEnv(
         protected val dir: VersionedDirectory,
@@ -72,12 +73,15 @@ class SimpleHashMapROEnv_Int_Float (
     }
 
     fun getCurrentMap(): SimpleHashMapRO_Int_Float {
-        val curFile = currentFile
+        var curFile = currentFile
+        curFile.file.acquire()
         val version = dir.readVersion()
         if (curFile.version != version) {
             if (lock.tryLock()) {
                 try {
                     currentFile = openFile(dir)
+                    curFile.file.release()
+                    curFile = currentFile
                 } finally {
                     lock.unlock()
                 }
@@ -87,7 +91,10 @@ class SimpleHashMapROEnv_Int_Float (
         return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file, collectStats)
     }
 
-    override fun close() {}
+    override fun close() {
+        currentFile.file.release()
+        dir.close()
+    }
 }
 
 class SimpleHashMapEnv_Int_Float private constructor(
@@ -205,9 +212,10 @@ class SimpleHashMapEnv_Int_Float private constructor(
         while (iterator.next()) {
             newMap.put(iterator.key(), iterator.value())
         }
-
         dir.writeVersion(newVersion)
+
         dir.deleteFile(getHashmapFilename(map.version))
+
         return openMap()
     }
 

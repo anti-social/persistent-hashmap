@@ -12,19 +12,19 @@ class RefCountedTests : StringSpec() {
                 v = it
             }
 
-            rc.count() shouldBe 1
+            rc.refCount() shouldBe 1
 
             rc.acquire() shouldBe 100
-            rc.count() shouldBe 2
+            rc.refCount() shouldBe 2
 
             rc.use {
                 it shouldBe 100
-                rc.count() shouldBe 3
+                rc.refCount() shouldBe 3
             }
-            rc.count() shouldBe 2
+            rc.refCount() shouldBe 2
 
             rc.release()
-            rc.count() shouldBe 1
+            rc.refCount() shouldBe 1
 
             v shouldBe 0
             rc.release()

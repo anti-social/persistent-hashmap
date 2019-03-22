@@ -5,12 +5,12 @@ import org.openjdk.jcstress.infra.results.IB_Result;
 
 import kotlin.Unit;
 
-// @JCStressTest
-// @Outcome(id = "0", expect = Expect.ACCEPTABLE, desc = "Ok")
-// @Outcome(id = "100", expect = Expect.ACCEPTABLE, desc = "Ok")
-// @State
+@JCStressTest
+@Outcome(id = "0", expect = Expect.ACCEPTABLE, desc = "Ok")
+@Outcome(id = "100", expect = Expect.ACCEPTABLE, desc = "Ok")
+@State
 public class RefCountedStressTest {
-    AtomicRefCounted<Integer> rc = new AtomicRefCounted<Integer>(100, (v) -> Unit.INSTANCE);
+    AtomicRefCounted<Integer> rc = new AtomicRefCounted<>(100, (v) -> Unit.INSTANCE);
 
     @Actor
     public void actor1() {
