@@ -442,7 +442,7 @@ open class SimpleHashMapROImpl_Int_Float
                            break
                        }
                        m = meta2
-                       if (!isBucketOccupied(m)) {
+                       if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
                            statsCollector.addGet(false, dist)
                            return defaultValue
                        }
