@@ -52,11 +52,11 @@ class VersionedMmapDirectory private constructor(
             return try {
                 lockChannel.tryLock()
                         ?: throw WriteLockException(
-                                "Cannot acquire a write lock of the file: $versionPath"
+                                "Cannot retain a write lock of the file: $versionPath"
                         )
             } catch (e: OverlappingFileLockException) {
                 throw WriteLockException(
-                        "Cannot acquire a write lock of the file: $versionPath", e
+                        "Cannot retain a write lock of the file: $versionPath", e
                 )
             }
         }

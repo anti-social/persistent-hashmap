@@ -62,7 +62,7 @@ class VersionedRamDirectory private constructor(
 
     override fun openFileWritable(name: String): RefCounted<MappedFile> {
         return buffers.computeIfPresent(name) { _, file ->
-            file.also { it.acquire() }
+            file.also { it.retain() }
         } ?: throw FileDoesNotExistException(Paths.get(name))
     }
 

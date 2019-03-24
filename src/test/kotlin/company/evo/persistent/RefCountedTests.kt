@@ -14,7 +14,7 @@ class RefCountedTests : StringSpec() {
 
             rc.refCount() shouldBe 1
 
-            rc.acquire() shouldBe 100
+            rc.retain() shouldBe 100
             rc.refCount() shouldBe 2
 
             rc.use {
@@ -23,18 +23,20 @@ class RefCountedTests : StringSpec() {
             }
             rc.refCount() shouldBe 2
 
-            rc.release()
+            rc.release() shouldBe false
             rc.refCount() shouldBe 1
 
             v shouldBe 0
-            rc.release()
+            rc.release() shouldBe true
             v shouldBe 100
 
-            shouldThrow<IllegalStateException> {
-                rc.acquire()
+            rc.retain() shouldBe null
+            rc.release() shouldBe false
+            shouldThrow<IllegalRefCountException> {
+                rc.get()
             }
-            shouldThrow<IllegalStateException> {
-                rc.release()
+            shouldThrow<IllegalRefCountException> {
+                rc.refCount()
             }
         }
     }

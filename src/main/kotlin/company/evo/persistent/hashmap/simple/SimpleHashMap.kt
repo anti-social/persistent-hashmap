@@ -274,8 +274,7 @@ open class SimpleHashMapROImpl_Int_Float
         private val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_Int_Float {
 
-    private val buffer = file.acquire()
-            .buffer
+    private val buffer = file.get().buffer
 
     init {
         assert(buffer.capacity() % PAGE_SIZE == 0) {

@@ -1,16 +1,27 @@
 package company.evo.persistent;
 
 import org.openjdk.jcstress.annotations.*;
-import org.openjdk.jcstress.infra.results.IB_Result;
+import org.openjdk.jcstress.infra.results.II_Result;
 
 import kotlin.Unit;
 
 @JCStressTest
-@Outcome(id = "0", expect = Expect.ACCEPTABLE, desc = "Ok")
-@Outcome(id = "100", expect = Expect.ACCEPTABLE, desc = "Ok")
+@Outcome(id = "0, 0", expect = Expect.ACCEPTABLE, desc = "Ok")
+@Outcome(id = "0, 100", expect = Expect.ACCEPTABLE, desc = "Ok")
+@Outcome(id = "100, 0", expect = Expect.ACCEPTABLE, desc = "Ok")
+@Outcome(id = "100, 100", expect = Expect.ACCEPTABLE, desc = "Ok")
 @State
 public class RefCountedStressTest {
-    AtomicRefCounted<Integer> rc = new AtomicRefCounted<>(100, (v) -> Unit.INSTANCE);
+    private static class IntBox {
+        volatile int v = 100;
+
+        IntBox(int v) {
+            this.v = v;
+        }
+    }
+    private AtomicRefCounted<IntBox> rc = new AtomicRefCounted<>(
+            new IntBox(100), (v) -> { v.v = -1; return Unit.INSTANCE; }
+    );
 
     @Actor
     public void actor1() {
@@ -18,11 +29,23 @@ public class RefCountedStressTest {
     }
 
     @Actor
-    public void actor2(IB_Result r) {
-        try {
-            r.r1 = rc.acquire();
-        } catch (IllegalStateException e) {
+    public void actor2(II_Result r) {
+        IntBox v = rc.retain();
+        if (v != null) {
+            r.r1 = v.v;
+        } else {
             r.r1 = 0;
+        }
+        rc.release();
+    }
+
+    @Actor
+    public void actor3(II_Result r) {
+        IntBox v = rc.retain();
+        if (v != null) {
+            r.r2 = v.v;
+        } else {
+            r.r2 = 0;
         }
         rc.release();
     }

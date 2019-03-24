@@ -1,19 +1,12 @@
 package company.evo.persistent.hashmap.simple
 
+import company.evo.persistent.*
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
-import company.evo.persistent.FileDoesNotExistException
-import company.evo.persistent.MappedFile
-import company.evo.persistent.RefCounted
-import company.evo.persistent.VersionedDirectory
-import company.evo.persistent.VersionedMmapDirectory
-import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.PRIMES
-import org.agrona.concurrent.AtomicBuffer
 import org.agrona.concurrent.UnsafeBuffer
-import java.lang.IllegalStateException
 
 abstract class SimpleHashMapBaseEnv(
         protected val dir: VersionedDirectory,
@@ -74,7 +67,7 @@ class SimpleHashMapROEnv_Int_Float (
 
     fun getCurrentMap(): SimpleHashMapRO_Int_Float {
         var curFile = currentFile
-        curFile.file.acquire()
+        curFile.file.retain()
         val version = dir.readVersion()
         if (curFile.version != version) {
             if (lock.tryLock()) {
@@ -177,9 +170,9 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mapInfo = MapInfo.calcFor(
                     initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
             )
-            val mappedFile = dir.createFile(filename, mapInfo.bufferSize)
-            val mappedBuffer = mappedFile.acquire().buffer
-            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mappedBuffer), mapInfo)
+            dir.createFile(filename, mapInfo.bufferSize).use { mappedFile ->
+                SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mappedFile.buffer), mapInfo)
+            }
             return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
         }
 
@@ -201,12 +194,9 @@ class SimpleHashMapEnv_Int_Float private constructor(
                 newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
         )
         // TODO Write into temporary file then rename
-        val mappedFile = dir.createFile(
-                getHashmapFilename(newVersion), mapInfo.bufferSize
-        )
+        val mappedFile = dir.createFile(getHashmapFilename(newVersion), mapInfo.bufferSize)
         val mappedBuffer = mappedFile.get().buffer
         map.header.dump(mappedBuffer)
-        // TODO Really copy map data
         val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
         val iterator = map.iterator()
         while (iterator.next()) {

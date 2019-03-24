@@ -7,7 +7,7 @@ class IllegalRefCountException() : Exception()
 interface RefCounted<T> {
     fun refCount(): Long
     fun get(): T
-    fun acquire(): T
+    fun retain(): T?
     fun release(): Boolean
 }
 
@@ -15,46 +15,65 @@ class AtomicRefCounted<T>(
         private val value: T,
         private val drop: (v: T) -> Unit
 ) : RefCounted<T> {
-    private val rc = AtomicLong(1)
+
+    // even - value is alive, odd - value was dropped
+    private val rc = AtomicLong(2)
 
     override fun refCount(): Long {
-        ensureAlive()
-        return rc.get()
+        val rc = rc.get()
+        if (rc and 1 != 0L) {
+            throw IllegalRefCountException()
+        }
+        return rc ushr 1
     }
 
     override fun get(): T {
-        ensureAlive()
+        val rc = rc.get()
+        if (rc and 1 != 0L) {
+            throw IllegalRefCountException()
+        }
         return value
     }
 
-    override fun acquire(): T {
-        val oldRc = rc.getAndIncrement()
-        if (oldRc == 0L) {
-            
+    override fun retain(): T? {
+        val oldRc = rc.getAndAdd(2)
+        if (oldRc and 1 != 0L) {
+            return null
         }
         return value
     }
 
     override fun release(): Boolean {
-        ensureAlive()
-        if (rc.decrementAndGet() == 0L) {
-            drop(value)
-            return true
-        }
-        return false
-    }
-
-    private fun ensureAlive() {
-        if (rc.get() == 0L) {
-            throw IllegalStateException("Have been already dropped")
+        while (true) {
+            val oldRc = rc.get()
+            return if (oldRc == 2L) {
+                if (!rc.compareAndSet(oldRc, 1)) {
+                    continue
+                }
+                drop(value)
+                true
+            } else {
+                if (!rc.compareAndSet(oldRc, oldRc - 2)) {
+                    continue
+                }
+                false
+            }
         }
     }
 }
 
-fun <T, R> RefCounted<T>.use(block: (T) -> R): R {
+inline fun <T, R> RefCounted<T>.use(block: (T) -> R): R {
+    var acquired = false
     try {
-        return block(acquire())
+        val value = retain()
+        if (value != null) {
+            acquired = true
+            return block(value)
+        }
+        throw IllegalRefCountException()
     } finally {
-        release()
+        if (acquired) {
+            release()
+        }
     }
 }
