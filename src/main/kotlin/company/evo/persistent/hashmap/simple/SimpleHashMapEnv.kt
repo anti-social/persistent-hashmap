@@ -1,13 +1,18 @@
 package company.evo.persistent.hashmap.simple
 
-import company.evo.persistent.*
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
+import company.evo.persistent.FileDoesNotExistException
+import company.evo.persistent.MappedFile
+import company.evo.persistent.VersionedDirectory
+import company.evo.persistent.VersionedMmapDirectory
+import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.rc.RefCounted
 import company.evo.rc.use
+
 import org.agrona.concurrent.UnsafeBuffer
 
 abstract class SimpleHashMapBaseEnv(
@@ -204,7 +209,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
 
     fun copyMap(map: SimpleHashMap_Int_Float): SimpleHashMap_Int_Float {
         val newVersion = map.version + 1
-        val newMaxEntries = map.maxEntries * 2
+        val newMaxEntries = map.size() * 2
         val mapInfo = MapInfo.calcFor(
                 newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
         )
