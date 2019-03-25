@@ -1,12 +1,12 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.persistent.MappedFile
-import company.evo.rc.RefCounted
 import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer_Int
 import company.evo.persistent.hashmap.Serializer_Float
+import company.evo.rc.RefCounted
 
 import org.agrona.DirectBuffer
 import org.agrona.concurrent.AtomicBuffer
@@ -48,7 +48,7 @@ data class MapInfo(
         }
 
         fun calcCapacity(maxEntries: Int, loadFactor: Double): Int {
-            val minCapacity = (maxEntries / loadFactor).toInt()
+            val minCapacity = Math.ceil(maxEntries / loadFactor).toInt()
             return PRIMES.first { it >= minCapacity }
         }
 

@@ -9,7 +9,6 @@ import company.evo.persistent.MappedFile
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
-import company.evo.persistent.hashmap.PRIMES
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
@@ -93,7 +92,8 @@ class SimpleHashMapROEnv_Int_Float (
                     // Retain a map file
                     // we just now created the map file and we are under a lock
                     // so calling retain should be always successful
-                    curFile.file.retain()
+                    curFile.file.retain() ?:
+                            throw IllegalStateException("Somehow the file just opened has been released")
                 } finally {
                     lock.unlock()
                 }
@@ -118,6 +118,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
     class Builder {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
+            private const val DEFAULT_INITIAL_ENTRIES = 1024
             private const val DEFAULT_LOAD_FACTOR = 0.75
 
             operator fun invoke(): Builder {
@@ -125,7 +126,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
             }
         }
 
-        var initialEntries: Int = PRIMES[0]
+        var initialEntries: Int = DEFAULT_INITIAL_ENTRIES
             private set
         fun initialEntries(maxEntries: Int) = apply {
             if (maxEntries <= 0) {
@@ -217,8 +218,9 @@ class SimpleHashMapEnv_Int_Float private constructor(
         val mappedFile = dir.createFile(
                 getHashmapFilename(newVersion), mapInfo.bufferSize
         )
-        val mappedBuffer = mappedFile.retain()!!.buffer
-        map.header.dump(mappedBuffer)
+        val mappedBuffer = mappedFile.retain()?.buffer ?:
+                throw IllegalStateException("Somehow the file just created has been released")
+        SimpleHashMap_Int_Float.initBuffer(mappedBuffer, mapInfo)
         val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
         val iterator = map.iterator()
         while (iterator.next()) {
