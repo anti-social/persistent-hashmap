@@ -1,6 +1,6 @@
 package company.evo.persistent.hashmap.simple;
 
-import company.evo.persistent.AtomicRefCounted;
+import company.evo.rc.AtomicRefCounted;
 import company.evo.persistent.MappedFile;
 
 import org.agrona.concurrent.UnsafeBuffer;

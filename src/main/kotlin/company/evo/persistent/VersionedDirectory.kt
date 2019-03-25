@@ -1,5 +1,6 @@
 package company.evo.persistent
 
+import company.evo.rc.RefCounted
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

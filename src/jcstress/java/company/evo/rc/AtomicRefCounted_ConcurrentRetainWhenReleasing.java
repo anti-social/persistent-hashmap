@@ -1,4 +1,4 @@
-package company.evo.persistent;
+package company.evo.rc;
 
 import org.openjdk.jcstress.annotations.*;
 import org.openjdk.jcstress.infra.results.II_Result;
@@ -11,9 +11,9 @@ import kotlin.Unit;
 @Outcome(id = "100, 0", expect = Expect.ACCEPTABLE, desc = "Ok")
 @Outcome(id = "100, 100", expect = Expect.ACCEPTABLE, desc = "Ok")
 @State
-public class RefCountedStressTest {
+public class AtomicRefCounted_ConcurrentRetainWhenReleasing {
     private static class IntBox {
-        volatile int v = 100;
+        volatile int v;
 
         IntBox(int v) {
             this.v = v;
@@ -24,29 +24,34 @@ public class RefCountedStressTest {
     );
 
     @Actor
-    public void actor1() {
+    public void release() {
         rc.release();
     }
 
     @Actor
-    public void actor2(II_Result r) {
-        IntBox v = rc.retain();
-        if (v != null) {
-            r.r1 = v.v;
-        } else {
-            r.r1 = 0;
-        }
-        rc.release();
+    public void use1(II_Result r) {
+        r.r1 = getValue();
     }
 
     @Actor
-    public void actor3(II_Result r) {
+    public void use2(II_Result r) {
+        r.r2 = getValue();
+    }
+
+    private int getValue() {
         IntBox v = rc.retain();
-        if (v != null) {
-            r.r2 = v.v;
-        } else {
-            r.r2 = 0;
+        boolean acquired = false;
+        try {
+            if (v != null) {
+                acquired = true;
+                return v.v;
+            } else {
+                return 0;
+            }
+        } finally {
+            if (acquired) {
+                rc.release();
+            }
         }
-        rc.release();
     }
 }

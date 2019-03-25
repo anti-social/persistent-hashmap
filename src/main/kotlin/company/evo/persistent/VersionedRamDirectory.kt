@@ -1,5 +1,7 @@
 package company.evo.persistent
 
+import company.evo.rc.AtomicRefCounted
+import company.evo.rc.RefCounted
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap

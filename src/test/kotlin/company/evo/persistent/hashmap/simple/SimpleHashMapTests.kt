@@ -1,6 +1,6 @@
 package company.evo.persistent.hashmap.simple
 
-import company.evo.persistent.AtomicRefCounted
+import company.evo.rc.AtomicRefCounted
 import company.evo.persistent.MappedFile
 import java.nio.ByteBuffer
 import java.util.Random
@@ -230,7 +230,6 @@ class SimpleHashMapTests : StringSpec() {
             SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
             val file = AtomicRefCounted(MappedFile(UnsafeBuffer(buffer), buffer)) {}
             return SimpleHashMapImpl_Int_Float(0L, file)
-                    .also { file.release() }
         }
     }
 }

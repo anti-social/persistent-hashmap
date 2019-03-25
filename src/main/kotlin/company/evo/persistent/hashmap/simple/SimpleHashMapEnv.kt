@@ -6,6 +6,8 @@ import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
 import company.evo.persistent.hashmap.PRIMES
+import company.evo.rc.RefCounted
+import company.evo.rc.use
 import org.agrona.concurrent.UnsafeBuffer
 
 abstract class SimpleHashMapBaseEnv(
@@ -66,21 +68,34 @@ class SimpleHashMapROEnv_Int_Float (
     }
 
     fun getCurrentMap(): SimpleHashMapRO_Int_Float {
-        var curFile = currentFile
-        curFile.file.retain()
+        var curFile: VersionedFile
+        // Retain a map file
+        while (true) {
+            curFile = currentFile
+            if (curFile.file.retain() != null) {
+                break
+            }
+        }
+
         val version = dir.readVersion()
         if (curFile.version != version) {
             if (lock.tryLock()) {
                 try {
                     currentFile = openFile(dir)
+                    // Release an old map file
                     curFile.file.release()
                     curFile = currentFile
+                    // Retain a map file
+                    // we just now created the map file and we are under a lock
+                    // so calling retain should be always successful
+                    curFile.file.retain()
                 } finally {
                     lock.unlock()
                 }
             }
         }
 
+        // File will be released when closing a hash map
         return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file, collectStats)
     }
 
@@ -194,8 +209,10 @@ class SimpleHashMapEnv_Int_Float private constructor(
                 newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
         )
         // TODO Write into temporary file then rename
-        val mappedFile = dir.createFile(getHashmapFilename(newVersion), mapInfo.bufferSize)
-        val mappedBuffer = mappedFile.get().buffer
+        val mappedFile = dir.createFile(
+                getHashmapFilename(newVersion), mapInfo.bufferSize
+        )
+        val mappedBuffer = mappedFile.retain()!!.buffer
         map.header.dump(mappedBuffer)
         val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
         val iterator = map.iterator()

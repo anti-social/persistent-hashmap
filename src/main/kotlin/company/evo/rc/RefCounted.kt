@@ -1,8 +1,8 @@
-package company.evo.persistent
+package company.evo.rc
 
 import java.util.concurrent.atomic.AtomicLong
 
-class IllegalRefCountException() : Exception()
+class IllegalRefCountException : Exception()
 
 interface RefCounted<T> {
     fun refCount(): Long
@@ -21,23 +21,18 @@ class AtomicRefCounted<T>(
 
     override fun refCount(): Long {
         val rc = rc.get()
-        if (rc and 1 != 0L) {
-            throw IllegalRefCountException()
-        }
+        ensureValid(rc)
         return rc ushr 1
     }
 
     override fun get(): T {
-        val rc = rc.get()
-        if (rc and 1 != 0L) {
-            throw IllegalRefCountException()
-        }
+        ensureValid(rc.get())
         return value
     }
 
     override fun retain(): T? {
         val oldRc = rc.getAndAdd(2)
-        if (oldRc and 1 != 0L) {
+        if (!isValid(oldRc)) {
             return null
         }
         return value
@@ -45,19 +40,28 @@ class AtomicRefCounted<T>(
 
     override fun release(): Boolean {
         while (true) {
-            val oldRc = rc.get()
-            return if (oldRc == 2L) {
-                if (!rc.compareAndSet(oldRc, 1)) {
+            val curRc = rc.get()
+            ensureValid(curRc)
+            return if (curRc == 2L) {
+                if (!rc.compareAndSet(curRc, 1)) {
                     continue
                 }
                 drop(value)
                 true
             } else {
-                if (!rc.compareAndSet(oldRc, oldRc - 2)) {
+                if (!rc.compareAndSet(curRc, curRc - 2)) {
                     continue
                 }
                 false
             }
+        }
+    }
+
+    private fun isValid(rc: Long) = rc and 1 == 0L
+
+    private fun ensureValid(rc: Long) {
+        if (!isValid(rc)) {
+            throw IllegalRefCountException()
         }
     }
 }

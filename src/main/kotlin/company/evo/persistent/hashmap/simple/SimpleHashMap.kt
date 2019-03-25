@@ -1,7 +1,7 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.persistent.MappedFile
-import company.evo.persistent.RefCounted
+import company.evo.rc.RefCounted
 import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
