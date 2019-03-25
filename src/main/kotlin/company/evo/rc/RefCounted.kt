@@ -4,14 +4,14 @@ import java.util.concurrent.atomic.AtomicLong
 
 class IllegalRefCountException : Exception()
 
-interface RefCounted<T> {
+interface RefCounted<out T> {
     fun refCount(): Long
     fun get(): T
     fun retain(): T?
     fun release(): Boolean
 }
 
-class AtomicRefCounted<T>(
+class AtomicRefCounted<out T>(
         private val value: T,
         private val drop: (v: T) -> Unit
 ) : RefCounted<T> {
