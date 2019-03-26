@@ -112,7 +112,6 @@ interface SimpleHashMapRO_Int_Float : AutoCloseable {
     val version: Long
     val maxEntries: Int
     val capacity: Int
-    val header: SimpleHashMap_Int_Float.Header
 
     fun get(key: K, defaultValue: V): V
     fun size(): Int
@@ -284,18 +283,16 @@ open class SimpleHashMapROImpl_Int_Float
 
     val bucketsPerPage = MapInfo.calcBucketsPerPage(SimpleHashMap_Int_Float.bucketLayout.size)
 
-    override val header = SimpleHashMap_Int_Float.Header.load(buffer)
-
-    // FIXME
-    override val maxEntries = header.maxEntries
-    override val capacity = header.capacity
+    val header = SimpleHashMap_Int_Float.Header.load(buffer)
+    final override val maxEntries = header.maxEntries
+    final override val capacity = header.capacity
 
     override fun close() {
         file.release()
     }
 
-    override fun size() = readSize()
-    override fun tombstones() = readTombstones()
+    final override fun size() = readSize()
+    final override fun tombstones() = readTombstones()
 
     override fun stats() = statsCollector
 
