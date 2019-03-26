@@ -210,21 +210,29 @@ class SimpleHashMapEnv_Int_Float private constructor(
 
     fun copyMap(map: SimpleHashMap_Int_Float): SimpleHashMap_Int_Float {
         val newVersion = map.version + 1
-        val newMaxEntries = map.size() * 2
-        val mapInfo = MapInfo.calcFor(
-                newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
-        )
-        // TODO Write into temporary file then rename
-        val mappedFile = dir.createFile(
-                getHashmapFilename(newVersion), mapInfo.bufferSize
-        )
-        val mappedBuffer = mappedFile.retain()?.buffer ?:
-                throw IllegalStateException("Somehow the file just created has been released")
-        SimpleHashMap_Int_Float.initBuffer(mappedBuffer, mapInfo)
-        val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
-        val iterator = map.iterator()
-        while (iterator.next()) {
-            newMap.put(iterator.key(), iterator.value())
+        var newMaxEntries = map.size() * 2
+        while (true) {
+            val mapInfo = MapInfo.calcFor(
+                    newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
+            )
+            // TODO Write into temporary file then rename
+            val newMapFilename = getHashmapFilename(newVersion)
+            val mappedFile = dir.createFile(
+                    newMapFilename, mapInfo.bufferSize
+            )
+            val mappedBuffer = mappedFile.retain()?.buffer
+                    ?: throw IllegalStateException("Somehow the file just created has been released")
+            SimpleHashMap_Int_Float.initBuffer(mappedBuffer, mapInfo)
+            val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
+            val iterator = map.iterator()
+            while (iterator.next()) {
+                if (newMap.put(iterator.key(), iterator.value()) == PutResult.OVERFLOW) {
+                    newMaxEntries *= 2
+                    dir.deleteFile(newMapFilename)
+                    continue
+                }
+            }
+            break
         }
         dir.writeVersion(newVersion)
 
