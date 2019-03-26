@@ -1,11 +1,10 @@
-package company.evo.persistent
+package company.evo.rc
 
-import company.evo.rc.AtomicRefCounted
-import company.evo.rc.use
 import io.kotlintest.shouldBe
+import io.kotlintest.shouldThrow
 import io.kotlintest.specs.StringSpec
 
-class RefCountedTests : StringSpec() {
+class AtomicRefCountedTests : StringSpec() {
     init {
         "atomic reference counted" {
             var v = 0
@@ -32,15 +31,15 @@ class RefCountedTests : StringSpec() {
             v shouldBe 100
 
             rc.retain() shouldBe null
-            // shouldThrow<IllegalRefCountException> {
-            //     rc.release()
-            // }
-            // shouldThrow<IllegalRefCountException> {
-            //     rc.get()
-            // }
-            // shouldThrow<IllegalRefCountException> {
-            //     rc.refCount()
-            // }
+            shouldThrow<IllegalRefCountException> {
+                rc.release()
+            }
+            shouldThrow<IllegalRefCountException> {
+                rc.get()
+            }
+            shouldThrow<IllegalRefCountException> {
+                rc.refCount()
+            }
         }
     }
 }
