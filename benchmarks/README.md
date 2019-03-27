@@ -1,7 +1,7 @@
 Benchmark results
 =================
 
-| Benchmark                                 | Entries   | Result (millions ops/s) |
+| Benchmark                                 | Entries   | Result (million ops/s) |
 |-------------------------------------------|-----------|-------------------------|
 | SimpleHashMapBenchmark.benchmark_1_reader |   1_000_000 | 5.521 ± 0.859           |
 | SimpleHashMapBenchmark.benchmark_1_reader |  10_000_000 | 6.285 ± 0.569           |
