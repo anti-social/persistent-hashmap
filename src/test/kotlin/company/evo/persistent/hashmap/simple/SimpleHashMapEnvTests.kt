@@ -26,6 +26,7 @@ class SimpleHashMapEnvTests : FunSpec() {
                             shouldThrow<VersionedDirectoryException> {
                                 SimpleHashMapEnv_Int_Float.Builder()
                                         .open(tmpDir)
+                                        .close()
                             }
                         }
 
@@ -88,7 +89,7 @@ class SimpleHashMapEnvTests : FunSpec() {
             SimpleHashMapEnv_Int_Float.Builder()
                     .createAnonymousHeap()
                     .use { env ->
-                        env.openMap()
+                        env.openMap().close()
                     }
         }
     }

@@ -1,5 +1,7 @@
 package company.evo.rc
 
+import java.lang.ref.Cleaner
+import java.lang.reflect.ParameterizedType
 import java.util.concurrent.atomic.AtomicLong
 
 class IllegalRefCountException : Exception()
@@ -16,8 +18,34 @@ class AtomicRefCounted<out T>(
         private val drop: (v: T) -> Unit
 ) : RefCounted<T> {
 
+    companion object {
+        private val cleaner = Cleaner.create()
+
+        private fun isValid(rc: Long) = rc and 1 == 0L
+
+        private fun ensureValid(rc: Long) {
+            if (!isValid(rc)) {
+                throw IllegalRefCountException()
+            }
+        }
+    }
+
     // even - value is alive, odd - value was dropped
     private val rc = AtomicLong(2)
+
+    class State(private val rc: AtomicLong, private val desc: String) : Runnable {
+        override fun run() {
+            val count = rc.get()
+            if (isValid(count)) {
+                println("WARNING! Reference counted object <$desc> was not dropped: " +
+                        "number of references is ${rc.get() ushr 1}")
+            }
+        }
+    }
+
+    init {
+        cleaner.register(this, State(rc, value.toString()))
+    }
 
     override fun refCount(): Long {
         val rc = rc.get()
@@ -54,14 +82,6 @@ class AtomicRefCounted<out T>(
                 }
                 false
             }
-        }
-    }
-
-    private fun isValid(rc: Long) = rc and 1 == 0L
-
-    private fun ensureValid(rc: Long) {
-        if (!isValid(rc)) {
-            throw IllegalRefCountException()
         }
     }
 }

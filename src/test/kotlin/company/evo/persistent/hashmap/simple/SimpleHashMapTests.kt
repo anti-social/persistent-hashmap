@@ -123,17 +123,17 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "put and remove a little random entries, then get them all" {
-            testRandomPutRemove(12, 17)
-        }
+        // "put and remove a little random entries, then get them all" {
+        //     testRandomPutRemove(12, 17)
+        // }
 
         "put and remove some random entries, then get them all".config(invocations = 100) {
             testRandomPutRemove(100, 163)
         }
 
-        "put and remove a bunch of random entries, then get them all" {
-            testRandomPutRemove(1_000_000, 1395263)
-        }
+        // "put and remove a bunch of random entries, then get them all" {
+        //     testRandomPutRemove(1_000_000, 1395263)
+        // }
     }
 
     private fun testRandomPutRemove(

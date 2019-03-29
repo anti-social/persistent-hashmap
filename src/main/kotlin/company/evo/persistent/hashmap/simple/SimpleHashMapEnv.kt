@@ -90,7 +90,7 @@ class SimpleHashMapROEnv_Int_Float (
                     curFile.file.release()
                     curFile = currentFile
                     // Retain a map file
-                    // we just now created the map file and we are under a lock
+                    // We just now created the map file and we are under a lock
                     // so calling retain should be always successful
                     curFile.file.retain() ?:
                             throw IllegalStateException("Somehow the file just opened has been released")

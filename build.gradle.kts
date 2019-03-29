@@ -56,6 +56,7 @@ val test by tasks.getting(Test::class) {
     }
     useJUnitPlatform()
     outputs.upToDateWhen { false }
+    testLogging.showStandardStreams = true
 }
 
 configure<JcstressPluginExtension> {
