@@ -7,6 +7,7 @@ import java.nio.ByteOrder
 import java.nio.file.Path
 
 import org.agrona.concurrent.AtomicBuffer
+import java.nio.MappedByteBuffer
 
 open class VersionedDirectoryException(
         msg: String, cause: Exception? = null
@@ -22,7 +23,13 @@ class FileDoesNotExistException(path: Path) : VersionedDirectoryException("Canno
 data class MappedFile(
         val buffer: AtomicBuffer,
         val rawBuffer: ByteBuffer
-)
+) {
+    fun flush() {
+        if (rawBuffer is MappedByteBuffer) {
+            rawBuffer.force()
+        }
+    }
+}
 
 interface VersionedDirectory : Closeable {
     /**

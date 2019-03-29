@@ -143,6 +143,7 @@ interface SimpleHashMapIterator_Int_Float {
 interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
+    fun flush()
     fun iterator(): SimpleHashMapIterator_Int_Float
 
     companion object {
@@ -273,7 +274,8 @@ open class SimpleHashMapROImpl_Int_Float
         private val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_Int_Float {
 
-    private val buffer = file.get().buffer
+    protected val mappedFile = file.get()
+    private val buffer = mappedFile.buffer
 
     init {
         assert(buffer.capacity() % PAGE_SIZE == 0) {
@@ -530,6 +532,10 @@ class SimpleHashMapImpl_Int_Float
 
     override fun iterator(): SimpleHashMapIterator_Int_Float {
         return Iterator()
+    }
+
+    override fun flush() {
+        mappedFile.flush()
     }
 
     override fun put(key: K, value: V): PutResult {
