@@ -141,6 +141,7 @@ interface SimpleHashMapIterator_Int_Float {
 interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
+    fun flush()
     fun iterator(): SimpleHashMapIterator_Int_Float
 
     companion object {
@@ -494,6 +495,10 @@ class SimpleHashMapImpl_Int_Float
     protected fun writeBucketData(bucketOffset: Int, key: K, value: V) {
         writeValue(bucketOffset, value)
         writeKey(bucketOffset, key)
+    }
+
+    override fun flush() {
+        buffer.fsync()
     }
 
     override fun put(key: K, value: V): PutResult {
