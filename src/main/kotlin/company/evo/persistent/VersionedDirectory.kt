@@ -21,6 +21,7 @@ class FileAlreadyExistsException(path: Path) : VersionedDirectoryException("Cann
 class FileDoesNotExistException(path: Path) : VersionedDirectoryException("Cannot open $path: does not exist")
 
 data class MappedFile(
+        val path: String,
         val buffer: AtomicBuffer,
         val rawBuffer: ByteBuffer
 ) {

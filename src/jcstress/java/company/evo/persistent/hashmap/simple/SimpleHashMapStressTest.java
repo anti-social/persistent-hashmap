@@ -27,7 +27,7 @@ public class SimpleHashMapStressTest {
         );
         ByteBuffer buffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize()).order(ByteOrder.nativeOrder());
         SimpleHashMap_Int_Float.Companion.initBuffer(new UnsafeBuffer(buffer), mapInfo);
-        MappedFile file = new MappedFile(new UnsafeBuffer(buffer), buffer);
+        MappedFile file = new MappedFile("<map>", new UnsafeBuffer(buffer), buffer);
         map = new SimpleHashMapImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(file, (f) -> Unit.INSTANCE),
@@ -37,7 +37,7 @@ public class SimpleHashMapStressTest {
         map.put(-6, -106);
         map.put(8, 108);
         ByteBuffer roBuffer = buffer.duplicate().clear().order(ByteOrder.nativeOrder());
-        MappedFile roFile = new MappedFile(new UnsafeBuffer(roBuffer), roBuffer);
+        MappedFile roFile = new MappedFile("<map>", new UnsafeBuffer(roBuffer), roBuffer);
         mapRO = new SimpleHashMapROImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(roFile, (f) -> Unit.INSTANCE),

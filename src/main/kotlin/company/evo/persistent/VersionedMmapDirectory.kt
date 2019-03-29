@@ -15,13 +15,10 @@ import java.nio.file.Path
 
 class VersionedMmapDirectory private constructor(
         val path: Path,
-        val versionFilename: String,
         private val versionFile: MappedFile,
         private val writeLock: FileLock? = null,
         val created: Boolean = false
 ) : AbstractVersionedDirectory(versionFile.buffer) {
-
-    val versionPath = getVersionPath(path, versionFilename)
 
     private var bufferCleaner: (MappedFile) -> Unit = {}
     var useUnmapHack = false
@@ -51,6 +48,7 @@ class VersionedMmapDirectory private constructor(
         }
 
         private fun acquireLock(versionPath: Path): FileLock {
+            // TODO: Close file and channel when releasing a lock
             val lockChannel = RandomAccessFile(versionPath.toString(), "rw").channel
             return try {
                 lockChannel.tryLock()
@@ -73,7 +71,7 @@ class VersionedMmapDirectory private constructor(
             }
             val versionLock = acquireLock(versionPath)
             return VersionedMmapDirectory(
-                    path, versionFilename, versionFile, versionLock, created = created
+                    path, versionFile, versionLock, created = created
             )
         }
 
@@ -83,7 +81,7 @@ class VersionedMmapDirectory private constructor(
                 throw FileDoesNotExistException(versionPath)
             }
             val versionFile = getVersionFile(versionPath, Mode.OpenRO())
-            return VersionedMmapDirectory(path, versionFilename, versionFile)
+            return VersionedMmapDirectory(path, versionFile)
         }
 
         private fun mmapFile(filepath: Path, mode: Mode): MappedFile {
@@ -96,7 +94,7 @@ class VersionedMmapDirectory private constructor(
                             .map(mode.mapMode, 0, channel.size())
                             .order(ByteOrder.nativeOrder())
                 }
-                MappedFile(UnsafeBuffer(mappedBuffer), mappedBuffer)
+                MappedFile(filepath.toString(), UnsafeBuffer(mappedBuffer), mappedBuffer)
             }
         }
 

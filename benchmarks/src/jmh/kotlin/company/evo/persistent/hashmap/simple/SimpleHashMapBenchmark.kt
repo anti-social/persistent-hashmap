@@ -1,6 +1,7 @@
 package company.evo.persistent.hashmap.simple
 
-import java.nio.ByteBuffer
+import company.evo.persistent.MappedFile
+import company.evo.rc.AtomicRefCounted
 
 import org.agrona.concurrent.UnsafeBuffer
 
@@ -13,6 +14,8 @@ import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
+import java.nio.ByteBuffer
+
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
     open class SimpleHashMapState : BaseState() {
@@ -23,7 +26,10 @@ open class SimpleHashMapBenchmark {
             val mapInfo = MapInfo.calcFor(entries, 0.5, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
             SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
-            map = SimpleHashMapImpl_Int_Float(0L, UnsafeBuffer(buffer), DefaultStatsCollector())
+            val file = AtomicRefCounted(
+                    MappedFile("<map>", UnsafeBuffer(buffer), buffer)
+            ) {}
+            map = SimpleHashMapImpl_Int_Float(0L, file, DefaultStatsCollector())
 
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)

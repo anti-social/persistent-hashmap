@@ -57,7 +57,7 @@ class VersionedRamDirectory private constructor(
         val byteBuffer = bufferAllocator(size)
                 .order(VersionedDirectory.BYTE_ORDER)
         val buffer = UnsafeBuffer(byteBuffer)
-        val file = AtomicRefCounted(MappedFile(buffer, byteBuffer)) {}
+        val file = AtomicRefCounted(MappedFile(name, buffer, byteBuffer)) {}
         buffers[name] = file
         return file
     }

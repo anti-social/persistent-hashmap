@@ -228,7 +228,9 @@ class SimpleHashMapTests : StringSpec() {
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
-            val file = AtomicRefCounted(MappedFile(UnsafeBuffer(buffer), buffer)) {}
+            val file = AtomicRefCounted(
+                    MappedFile("<map>", UnsafeBuffer(buffer), buffer)
+            ) {}
             return SimpleHashMapImpl_Int_Float(0L, file)
         }
     }
