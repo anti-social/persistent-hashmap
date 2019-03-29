@@ -6,6 +6,7 @@ import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
 import company.evo.persistent.FileDoesNotExistException
+import company.evo.persistent.MappedFile
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
@@ -33,7 +34,7 @@ class SimpleHashMapROEnv_Int_Float (
 
     private data class VersionedFile(
             val version: Long,
-            val file: RefCounted<IOBuffer>
+            val file: RefCounted<MappedFile<IOBuffer>>
     )
 
     private val lock = ReentrantLock()
@@ -189,8 +190,8 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mapInfo = MapInfo.calcFor(
                     initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
             )
-            dir.createFile(filename, mapInfo.bufferSize).use { buffer ->
-                SimpleHashMap_Int_Float.initBuffer(buffer, mapInfo)
+            dir.createFile(filename, mapInfo.bufferSize).use { file ->
+                SimpleHashMap_Int_Float.initBuffer(file.buffer, mapInfo)
             }
             return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
         }
@@ -215,12 +216,12 @@ class SimpleHashMapEnv_Int_Float private constructor(
             )
             // TODO Write into temporary file then rename
             val newMapFilename = getHashmapFilename(newVersion)
-            val mappedFile = dir.createFile(
+            val newMappedFile = dir.createFile(
                     newMapFilename, newMapInfo.bufferSize
             )
-            val mappedBuffer = mappedFile.get()
-            SimpleHashMap_Int_Float.initBuffer(mappedBuffer, newMapInfo)
-            SimpleHashMap_Int_Float.create(newVersion, mappedFile).use { newMap ->
+            val newMappedBuffer = newMappedFile.get().buffer
+            SimpleHashMap_Int_Float.initBuffer(newMappedBuffer, newMapInfo)
+            SimpleHashMap_Int_Float.create(newVersion, newMappedFile).use { newMap ->
                 val iterator = map.iterator()
                 while (iterator.next()) {
                     if (newMap.put(iterator.key(), iterator.value()) == PutResult.OVERFLOW) {

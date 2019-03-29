@@ -18,6 +18,11 @@ class ReadOnlyException(msg: String) : VersionedDirectoryException(msg)
 class FileAlreadyExistsException(path: Path) : VersionedDirectoryException("Cannot create $path: already exists")
 class FileDoesNotExistException(path: Path) : VersionedDirectoryException("Cannot open $path: does not exist")
 
+data class MappedFile<out T: IOBuffer>(
+        val path: String,
+        val buffer: T
+)
+
 interface VersionedDirectory : Closeable {
     /**
      * Reads a version from the version file.
@@ -36,7 +41,7 @@ interface VersionedDirectory : Closeable {
      * Ownership of the returned value is moved to the caller of the method.
      * So it is a user responsibility to close the file.
      */
-    fun createFile(name: String, size: Int): RefCounted<MutableIOBuffer>
+    fun createFile(name: String, size: Int): RefCounted<MappedFile<MutableIOBuffer>>
 
     /**
      * Opens an existing file with [name] and maps it into a buffer.
@@ -45,7 +50,7 @@ interface VersionedDirectory : Closeable {
      * Ownership of the returned value is moved to the caller of the method.
      * So it is a user responsibility to close the file.
      */
-    fun openFileWritable(name: String): RefCounted<MutableIOBuffer>
+    fun openFileWritable(name: String): RefCounted<MappedFile<MutableIOBuffer>>
 
     /**
      * Opens an existing file with [name] in read-only mode and maps it into a buffer.
@@ -54,7 +59,7 @@ interface VersionedDirectory : Closeable {
      * Ownership of the returned value is moved to the caller of the method.
      * So it is a user responsibility to close the file.
      */
-    fun openFileReadOnly(name: String): RefCounted<IOBuffer>
+    fun openFileReadOnly(name: String): RefCounted<MappedFile<IOBuffer>>
 
     /**
      * Deletes a file with [name].
@@ -67,13 +72,13 @@ interface VersionedDirectory : Closeable {
 }
 
 abstract class AbstractVersionedDirectory(
-        private val versionBuffer: MutableIOBuffer
+        private val versionFile: MappedFile<MutableIOBuffer>
 ) : VersionedDirectory {
 
-    override fun readVersion() = versionBuffer.readLongVolatile(0)
+    override fun readVersion() = versionFile.buffer.readLongVolatile(0)
 
     override fun writeVersion(version: Long) {
-        versionBuffer.writeLongVolatile(0, version)
+        versionFile.buffer.writeLongVolatile(0, version)
     }
 
     override fun close() {}

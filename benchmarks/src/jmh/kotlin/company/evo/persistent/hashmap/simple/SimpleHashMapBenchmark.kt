@@ -1,9 +1,8 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.io.MutableUnsafeBuffer
+import company.evo.persistent.MappedFile
 import company.evo.rc.AtomicRefCounted
-
-import java.nio.ByteBuffer
 
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
@@ -13,6 +12,8 @@ import org.openjdk.jmh.annotations.State
 import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
+
+import java.nio.ByteBuffer
 
 open class SimpleHashMapBenchmark {
     @State(Scope.Benchmark)
@@ -26,7 +27,7 @@ open class SimpleHashMapBenchmark {
             SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
             map = SimpleHashMapImpl_Int_Float(
                     0L,
-                    AtomicRefCounted(MutableUnsafeBuffer(buffer)) {},
+                    AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {},
                     DefaultStatsCollector()
             )
 

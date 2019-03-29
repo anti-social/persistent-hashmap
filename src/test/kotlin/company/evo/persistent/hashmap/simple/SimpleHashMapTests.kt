@@ -1,6 +1,7 @@
 package company.evo.persistent.hashmap.simple
 
 import company.evo.io.MutableUnsafeBuffer
+import company.evo.persistent.MappedFile
 import company.evo.rc.AtomicRefCounted
 
 import java.nio.ByteBuffer
@@ -227,7 +228,9 @@ class SimpleHashMapTests : StringSpec() {
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
-            val file = AtomicRefCounted(MutableUnsafeBuffer(buffer)) {}
+            val file = AtomicRefCounted(
+                    MappedFile("<map>", MutableUnsafeBuffer(buffer))
+            ) {}
             return SimpleHashMapImpl_Int_Float(0L, file)
         }
     }

@@ -2,6 +2,7 @@ package company.evo.persistent.hashmap.simple
 
 import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
+import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
@@ -120,7 +121,7 @@ interface SimpleHashMapRO_Int_Float : AutoCloseable {
 
     companion object {
         fun create(
-                ver: Long, file: RefCounted<IOBuffer>, collectStats: Boolean = false
+                ver: Long, file: RefCounted<MappedFile<IOBuffer>>, collectStats: Boolean = false
         ): SimpleHashMapRO_Int_Float {
             return SimpleHashMapROImpl_Int_Float(
                     ver,
@@ -169,7 +170,7 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
             header.dump(buffer)
         }
 
-        fun create(ver: Long, file: RefCounted<MutableIOBuffer>): SimpleHashMap_Int_Float {
+        fun create(ver: Long, file: RefCounted<MappedFile<MutableIOBuffer>>): SimpleHashMap_Int_Float {
             return SimpleHashMapImpl_Int_Float(ver, file)
         }
     }
@@ -268,11 +269,11 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
 open class SimpleHashMapROImpl_Int_Float
 @JvmOverloads constructor(
         override val version: Long,
-        private val file: RefCounted<IOBuffer>,
+        private val file: RefCounted<MappedFile<IOBuffer>>,
         private val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_Int_Float {
 
-    private val buffer = file.get()
+    private val buffer = file.get().buffer
 
     init {
         assert(buffer.size() % PAGE_SIZE == 0) {
@@ -456,14 +457,14 @@ open class SimpleHashMapROImpl_Int_Float
 class SimpleHashMapImpl_Int_Float
 @JvmOverloads constructor(
         version: Long,
-        private val file: RefCounted<MutableIOBuffer>,
+        private val file: RefCounted<MappedFile<MutableIOBuffer>>,
         statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMap_Int_Float, SimpleHashMapROImpl_Int_Float(
         version,
         file,
         statsCollector
 ) {
-    private val buffer = file.get()
+    private val buffer = file.get().buffer
 
     protected fun writeSize(size: Int) {
         buffer.writeIntOrdered(SimpleHashMap_Int_Float.Header.SIZE_OFFSET, size)

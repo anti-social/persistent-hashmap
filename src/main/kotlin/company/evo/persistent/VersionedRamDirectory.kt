@@ -14,12 +14,15 @@ class VersionedRamDirectory private constructor(
         private val bufferAllocator: (Int) -> ByteBuffer,
         private val isDirect: Boolean
 ) : AbstractVersionedDirectory(
-        MutableUnsafeBuffer(
-                bufferAllocator(VersionedDirectory.VERSION_LENGTH)
+        MappedFile(
+                "<version>",
+                MutableUnsafeBuffer(
+                        bufferAllocator(VersionedDirectory.VERSION_LENGTH)
+                )
         )
 ) {
 
-    private val buffers = ConcurrentHashMap<String, RefCounted<MutableIOBuffer>>()
+    private val buffers = ConcurrentHashMap<String, RefCounted<MappedFile<MutableIOBuffer>>>()
 
     private var bufferCleaner: (MutableIOBuffer) -> Unit = {}
     var useUnmapHack = false
@@ -51,23 +54,23 @@ class VersionedRamDirectory private constructor(
         }
     }
 
-    override fun createFile(name: String, size: Int): RefCounted<MutableIOBuffer> {
+    override fun createFile(name: String, size: Int): RefCounted<MappedFile<MutableIOBuffer>> {
         if (buffers.containsKey(name)) {
             throw FileAlreadyExistsException(Paths.get(name))
         }
         val buffer = MutableUnsafeBuffer(bufferAllocator(size))
-        val file = AtomicRefCounted(buffer) {}
+        val file = AtomicRefCounted(MappedFile(name, buffer)) {}
         buffers[name] = file
         return file
     }
 
-    override fun openFileWritable(name: String): RefCounted<MutableIOBuffer> {
+    override fun openFileWritable(name: String): RefCounted<MappedFile<MutableIOBuffer>> {
         return buffers.computeIfPresent(name) { _, file ->
             file.also { it.retain() }
         } ?: throw FileDoesNotExistException(Paths.get(name))
     }
 
-    override fun openFileReadOnly(name: String): RefCounted<IOBuffer> {
+    override fun openFileReadOnly(name: String): RefCounted<MappedFile<IOBuffer>> {
         return openFileWritable(name)
     }
 
