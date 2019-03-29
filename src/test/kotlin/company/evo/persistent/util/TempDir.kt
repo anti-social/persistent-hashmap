@@ -1,9 +1,9 @@
 package company.evo.persistent.util
 
 import java.nio.file.Files
+import java.nio.file.Path
 
 import org.apache.commons.io.FileUtils.deleteDirectory
-import java.nio.file.Path
 
 class TempDir : AutoCloseable {
     val path: Path = Files.createTempDirectory(null)
