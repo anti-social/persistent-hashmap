@@ -25,40 +25,52 @@ data class MappedFile(
 )
 
 interface VersionedDirectory : Closeable {
+    /**
+     * Reads a version from the version file.
+     */
     fun readVersion(): Long
+
+    /**
+     * Writes a [version] to the version file.
+     */
     fun writeVersion(version: Long)
+
+    /**
+     * Creates a file with [name] and [size] and maps it into a buffer.
+     * @return a [MappedFile] wrapped into [RefCounted].
+     *
+     * Ownership of the returned value is moved to the caller of the method.
+     * So it is a user responsibility to close the file.
+     */
     fun createFile(name: String, size: Int): RefCounted<MappedFile>
+
+    /**
+     * Opens an existing file with [name] and maps it into a buffer.
+     * @return a [MappedFile] wrapped into [RefCounted].
+     *
+     * Ownership of the returned value is moved to the caller of the method.
+     * So it is a user responsibility to close the file.
+     */
     fun openFileWritable(name: String): RefCounted<MappedFile>
+
+    /**
+     * Opens an existing file with [name] in read-only mode and maps it into a buffer.
+     * @return a [MappedFile] wrapped into [RefCounted].
+     *
+     * Ownership of the returned value is moved to the caller of the method.
+     * So it is a user responsibility to close the file.
+     */
     fun openFileReadOnly(name: String): RefCounted<MappedFile>
+
+    /**
+     * Deletes a file with [name].
+     */
     fun deleteFile(name: String)
 
     companion object {
         const val VERSION_LENGTH = 8
         val BYTE_ORDER: ByteOrder = ByteOrder.LITTLE_ENDIAN
     }
-
-    // fun openVersionedFile(name: String): RefCounted<VersionedFile> {
-    //     var version = readVersion()
-    //     while (true) {
-    //         val newFile = tryOpenFile(version, name)
-    //         if (newFile != null) {
-    //             return AtomicRefCounted(newFile, {})
-    //         }
-    //         val newVersion = readVersion()
-    //         if (newVersion == version) {
-    //             throw FileDoesNotExistException(Paths.get(getHashmapFilename(version)))
-    //         }
-    //         version = newVersion
-    //     }
-    // }
-    //
-    // private fun tryOpenFile(version: Long, name: String): VersionedFile? {
-    //     return try {
-    //         VersionedFile(version, openFileReadOnly(name))
-    //     } catch (e: FileDoesNotExistException) {
-    //         null
-    //     }
-    // }
 }
 
 abstract class AbstractVersionedDirectory(
