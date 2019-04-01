@@ -191,9 +191,10 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mapInfo = MapInfo.calcFor(
                     initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
             )
-            dir.createFile(filename, mapInfo.bufferSize).use { mappedFile ->
-                SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mappedFile.buffer), mapInfo)
-            }
+            val mappedFile = dir.createFile(filename, mapInfo.bufferSize)
+            val mappedBuffer = mappedFile.get().buffer
+            SimpleHashMap_Int_Float.initBuffer(mappedBuffer, mapInfo)
+            mappedFile.release()
             return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
         }
 
@@ -226,6 +227,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
                     if (newMap.put(iterator.key(), iterator.value()) == PutResult.OVERFLOW) {
                         newMaxEntries *= 2
                         dir.deleteFile(newMapFilename)
+                        // FIXME: continue outer loop
                         continue
                     }
                 }
