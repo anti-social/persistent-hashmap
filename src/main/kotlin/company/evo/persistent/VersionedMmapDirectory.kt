@@ -1,9 +1,10 @@
 package company.evo.persistent
 
+import company.evo.io.IOBuffer
+import company.evo.io.MutableIOBuffer
+import company.evo.io.MutableUnsafeBuffer
 import company.evo.rc.AtomicRefCounted
 import company.evo.rc.RefCounted
-
-import org.agrona.concurrent.UnsafeBuffer
 
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
@@ -16,22 +17,25 @@ import java.nio.file.Path
 class VersionedMmapDirectory private constructor(
         val path: Path,
         val versionFilename: String,
-        private val versionFile: MappedFile,
+        private val versionFile: MutableIOBuffer,
         private val writeLock: FileLock? = null,
         val created: Boolean = false
-) : AbstractVersionedDirectory(versionFile.buffer) {
+) : AbstractVersionedDirectory(versionFile) {
 
     val versionPath = getVersionPath(path, versionFilename)
 
-    private var bufferCleaner: (MappedFile) -> Unit = {}
+    private var bufferCleaner: (IOBuffer) -> Unit = {}
     var useUnmapHack = false
         set(useUnmapHack) {
             if (useUnmapHack && BufferCleaner.BUFFER_CLEANER == null) {
                 throw IllegalArgumentException(BufferCleaner.UNMAP_NOT_SUPPORTED_REASON)
             }
             field = useUnmapHack
-            bufferCleaner = { file ->
-                BufferCleaner.BUFFER_CLEANER?.clean(file.rawBuffer)
+            bufferCleaner = { buffer ->
+                val byteBuffer = buffer.getByteBuffer()
+                if (byteBuffer != null) {
+                    BufferCleaner.BUFFER_CLEANER?.clean(byteBuffer)
+                }
             }
         }
 
@@ -40,14 +44,14 @@ class VersionedMmapDirectory private constructor(
             return path.resolve(versionFilename)
         }
 
-        private fun getVersionFile(versionPath: Path, mode: Mode): MappedFile {
-            val versionFile = mmapFile(versionPath, mode)
-            if (versionFile.buffer.capacity() != VersionedDirectory.VERSION_LENGTH) {
+        private fun getVersionFile(versionPath: Path, mode: Mode): MutableIOBuffer {
+            val buffer = mmapFile(versionPath, mode)
+            if (buffer.size() != VersionedDirectory.VERSION_LENGTH) {
                 throw CorruptedVersionFileException(
                         "Version file must have size ${VersionedDirectory.VERSION_LENGTH}"
                 )
             }
-            return versionFile
+            return buffer
         }
 
         private fun acquireLock(versionPath: Path): FileLock {
@@ -86,7 +90,7 @@ class VersionedMmapDirectory private constructor(
             return VersionedMmapDirectory(path, versionFilename, versionFile)
         }
 
-        private fun mmapFile(filepath: Path, mode: Mode): MappedFile {
+        private fun mmapFile(filepath: Path, mode: Mode): MutableIOBuffer {
             return RandomAccessFile(filepath.toString(), mode.mode).use { file ->
                 if (mode is Mode.Create) {
                     file.setLength(mode.size.toLong())
@@ -96,7 +100,7 @@ class VersionedMmapDirectory private constructor(
                             .map(mode.mapMode, 0, channel.size())
                             .order(ByteOrder.nativeOrder())
                 }
-                MappedFile(UnsafeBuffer(mappedBuffer), mappedBuffer)
+                MutableUnsafeBuffer(mappedBuffer)
             }
         }
 
@@ -114,7 +118,7 @@ class VersionedMmapDirectory private constructor(
         writeLock?.close()
     }
 
-    override fun createFile(name: String, size: Int): RefCounted<MappedFile> {
+    override fun createFile(name: String, size: Int): RefCounted<MutableIOBuffer> {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (filepath.toFile().exists()) {
@@ -123,7 +127,7 @@ class VersionedMmapDirectory private constructor(
         return AtomicRefCounted(mmapFile(filepath, Mode.Create(size)), bufferCleaner)
     }
 
-    override fun openFileWritable(name: String): RefCounted<MappedFile> {
+    override fun openFileWritable(name: String): RefCounted<MutableIOBuffer> {
         ensureWriteLock()
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
@@ -132,7 +136,7 @@ class VersionedMmapDirectory private constructor(
         return AtomicRefCounted(mmapFile(filepath, Mode.OpenRW()), bufferCleaner)
     }
 
-    override fun openFileReadOnly(name: String): RefCounted<MappedFile> {
+    override fun openFileReadOnly(name: String): RefCounted<IOBuffer> {
         val filepath = path.resolve(name)
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException(filepath)

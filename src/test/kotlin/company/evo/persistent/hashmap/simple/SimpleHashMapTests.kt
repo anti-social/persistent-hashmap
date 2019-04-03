@@ -1,15 +1,14 @@
 package company.evo.persistent.hashmap.simple
 
+import company.evo.io.MutableUnsafeBuffer
 import company.evo.rc.AtomicRefCounted
-import company.evo.persistent.MappedFile
+
 import java.nio.ByteBuffer
 import java.util.Random
 
 import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
-
-import org.agrona.concurrent.UnsafeBuffer
 
 class SimpleHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
@@ -123,7 +122,7 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "put and remove a little random entries, then get them all" {
+        "put and remove a little random entries, then get them all".config(invocations = 100) {
             testRandomPutRemove(12, 17)
         }
 
@@ -131,7 +130,7 @@ class SimpleHashMapTests : StringSpec() {
             testRandomPutRemove(100, 163)
         }
 
-        "put and remove a bunch of random entries, then get them all" {
+        "put and remove a bunch of random entries, then get them all".config(invocations = 1) {
             testRandomPutRemove(1_000_000, 1395263)
         }
     }
@@ -227,8 +226,8 @@ class SimpleHashMapTests : StringSpec() {
         ): SimpleHashMap_Int_Float {
             val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
-            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
-            val file = AtomicRefCounted(MappedFile(UnsafeBuffer(buffer), buffer)) {}
+            SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
+            val file = AtomicRefCounted(MutableUnsafeBuffer(buffer)) {}
             return SimpleHashMapImpl_Int_Float(0L, file)
         }
     }

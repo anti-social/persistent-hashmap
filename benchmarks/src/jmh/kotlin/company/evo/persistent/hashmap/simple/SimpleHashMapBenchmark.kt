@@ -1,8 +1,9 @@
 package company.evo.persistent.hashmap.simple
 
-import java.nio.ByteBuffer
+import company.evo.io.MutableUnsafeBuffer
+import company.evo.rc.AtomicRefCounted
 
-import org.agrona.concurrent.UnsafeBuffer
+import java.nio.ByteBuffer
 
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
@@ -22,8 +23,12 @@ open class SimpleHashMapBenchmark {
         fun initMap() {
             val mapInfo = MapInfo.calcFor(entries, 0.5, SimpleHashMap_Int_Float.bucketLayout.size)
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
-            SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(buffer), mapInfo)
-            map = SimpleHashMapImpl_Int_Float(0L, UnsafeBuffer(buffer), DefaultStatsCollector())
+            SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
+            map = SimpleHashMapImpl_Int_Float(
+                    0L,
+                    AtomicRefCounted(MutableUnsafeBuffer(buffer)) {},
+                    DefaultStatsCollector()
+            )
 
             val keys = intKeys.asSequence().take(entries)
             val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)

@@ -1,15 +1,13 @@
 package company.evo.persistent.hashmap.simple
 
-import company.evo.persistent.MappedFile
+import company.evo.io.IOBuffer
+import company.evo.io.MutableIOBuffer
 import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer_Int
 import company.evo.persistent.hashmap.Serializer_Float
 import company.evo.rc.RefCounted
-
-import org.agrona.DirectBuffer
-import org.agrona.concurrent.AtomicBuffer
 
 open class PersistentHashMapException(msg: String, cause: Exception? = null) : Exception(msg, cause)
 class InvalidHashtableException(msg: String) : PersistentHashMapException(msg)
@@ -122,7 +120,7 @@ interface SimpleHashMapRO_Int_Float : AutoCloseable {
 
     companion object {
         fun create(
-                ver: Long, file: RefCounted<MappedFile>, collectStats: Boolean = false
+                ver: Long, file: RefCounted<IOBuffer>, collectStats: Boolean = false
         ): SimpleHashMapRO_Int_Float {
             return SimpleHashMapROImpl_Int_Float(
                     ver,
@@ -163,14 +161,14 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
         val bucketLayout = BucketLayout(META_SIZE, keySerializer.size, valueSerializer.size)
 
         fun initBuffer(
-                buffer: AtomicBuffer,
+                buffer: MutableIOBuffer,
                 mapInfo: MapInfo
         ) {
             val header = SimpleHashMap_Int_Float.Header(mapInfo.capacity, mapInfo.maxEntries)
             header.dump(buffer)
         }
 
-        fun create(ver: Long, file: RefCounted<MappedFile>): SimpleHashMap_Int_Float {
+        fun create(ver: Long, file: RefCounted<MutableIOBuffer>): SimpleHashMap_Int_Float {
             return SimpleHashMapImpl_Int_Float(ver, file)
         }
     }
@@ -193,16 +191,16 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
             private const val KEY_TYPE_SHIFT = 0
             private const val VALUE_TYPE_SHIFT = 3
 
-            fun load(buffer: DirectBuffer): Header {
+            fun load(buffer: IOBuffer): Header {
                 val magic = ByteArray(MAGIC.size)
-                buffer.getBytes(0, magic)
+                buffer.readBytes(0, magic)
                 if (!magic.contentEquals(MAGIC)) {
                     throw InvalidHashtableException(
                             "Expected ${MAGIC.contentToString()} magic number " +
                                     "but was: ${magic.contentToString()}"
                     )
                 }
-                val flags = buffer.getLong(FLAGS_OFFSET)
+                val flags = buffer.readLong(FLAGS_OFFSET)
                 (getKeySerial(flags) to keySerializer.serial).let {
                     (serial, expectedSerial) ->
                     assert(serial == expectedSerial) {
@@ -215,8 +213,8 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
                         "Mismatch value type serial: expected $expectedSerial but was $serial"
                     }
                 }
-                val capacity = toIntOrFail(buffer.getLong(CAPACITY_OFFSET), "capacity")
-                val maxEntries = toIntOrFail(buffer.getLong(MAX_ENTRIES_OFFSET), "initialEntries")
+                val capacity = toIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
+                val maxEntries = toIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
                 return Header(
                         capacity = capacity,
                         maxEntries = maxEntries
@@ -248,13 +246,13 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
             }
         }
 
-        fun dump(buffer: AtomicBuffer) {
-            buffer.putBytes(0, MAGIC)
-            buffer.putLong(FLAGS_OFFSET, calcFlags(keySerializer, valueSerializer))
-            buffer.putLong(CAPACITY_OFFSET, capacity.toLong())
-            buffer.putLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
-            buffer.putLong(SIZE_OFFSET, 0)
-            buffer.putLong(TOMBSTONES_OFFSET, 0)
+        fun dump(buffer: MutableIOBuffer) {
+            buffer.writeBytes(0, MAGIC)
+            buffer.writeLong(FLAGS_OFFSET, calcFlags(keySerializer, valueSerializer))
+            buffer.writeLong(CAPACITY_OFFSET, capacity.toLong())
+            buffer.writeLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
+            buffer.writeLong(SIZE_OFFSET, 0)
+            buffer.writeLong(TOMBSTONES_OFFSET, 0)
         }
 
         override fun toString(): String {
@@ -269,14 +267,14 @@ interface SimpleHashMap_Int_Float : SimpleHashMapRO_Int_Float {
 open class SimpleHashMapROImpl_Int_Float
 @JvmOverloads constructor(
         override val version: Long,
-        private val file: RefCounted<MappedFile>,
+        private val file: RefCounted<IOBuffer>,
         private val statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMapRO_Int_Float {
 
-    private val buffer = file.get().buffer
+    private val buffer = file.get()
 
     init {
-        assert(buffer.capacity() % PAGE_SIZE == 0) {
+        assert(buffer.size() % PAGE_SIZE == 0) {
             "Buffer length should be a multiple of $PAGE_SIZE"
         }
     }
@@ -356,32 +354,17 @@ open class SimpleHashMapROImpl_Int_Float
     }
 
     protected fun readSize(): Int {
-        return buffer.getInt(SimpleHashMap_Int_Float.Header.SIZE_OFFSET)
-    }
-
-    protected fun writeSize(size: Int) {
-        buffer.putIntOrdered(SimpleHashMap_Int_Float.Header.SIZE_OFFSET, size)
+        return buffer.readInt(SimpleHashMap_Int_Float.Header.SIZE_OFFSET)
     }
 
     protected fun readTombstones(): Int {
-        return buffer.getInt(SimpleHashMap_Int_Float.Header.TOMBSTONES_OFFSET)
-    }
-
-    protected fun writeTombstones(tombstones: Int) {
-        buffer.putIntOrdered(SimpleHashMap_Int_Float.Header.TOMBSTONES_OFFSET, tombstones)
+        return buffer.readInt(SimpleHashMap_Int_Float.Header.TOMBSTONES_OFFSET)
     }
 
     protected fun readBucketMeta(bucketOffset: Int): Int {
-        return buffer.getShortVolatile(
+        return buffer.readShortVolatile(
                 bucketOffset + SimpleHashMap_Int_Float.bucketLayout.metaOffset
         ).toInt() and 0xFFFF
-    }
-
-    protected fun writeBucketMeta(bucketOffset: Int, tag: Int, version: Int) {
-        buffer.putShortVolatile(
-                bucketOffset + SimpleHashMap_Int_Float.bucketLayout.metaOffset,
-                (tag or (version and SimpleHashMap_Int_Float.VER_TAG_MASK)).toShort()
-        )
     }
 
     protected fun readKey(bucketOffset: Int): K {
@@ -398,31 +381,14 @@ open class SimpleHashMapROImpl_Int_Float
 
     private fun readRawKey(bucketOffset: Int): ByteArray {
         val rawKey = ByteArray(SimpleHashMap_Int_Float.keySerializer.size)
-        buffer.getBytes(bucketOffset + SimpleHashMap_Int_Float.bucketLayout.keyOffset, rawKey)
+        buffer.readBytes(bucketOffset + SimpleHashMap_Int_Float.bucketLayout.keyOffset, rawKey)
         return rawKey
     }
 
     private fun readRawValue(bucketOffset: Int): ByteArray {
         val rawValue = ByteArray(SimpleHashMap_Int_Float.valueSerializer.size)
-        buffer.getBytes(bucketOffset + SimpleHashMap_Int_Float.bucketLayout.valueOffset, rawValue)
+        buffer.readBytes(bucketOffset + SimpleHashMap_Int_Float.bucketLayout.valueOffset, rawValue)
         return rawValue
-    }
-
-    protected fun writeKey(bucketOffset: Int, key: K) {
-        SimpleHashMap_Int_Float.keySerializer.write(
-                buffer, bucketOffset + SimpleHashMap_Int_Float.bucketLayout.keyOffset, key
-        )
-    }
-
-    protected fun writeValue(bucketOffset: Int, value: V) {
-        SimpleHashMap_Int_Float.valueSerializer.write(
-                buffer, bucketOffset + SimpleHashMap_Int_Float.bucketLayout.valueOffset, value
-        )
-    }
-
-    protected fun writeBucketData(bucketOffset: Int, key: K, value: V) {
-        writeValue(bucketOffset, value)
-        writeKey(bucketOffset, key)
     }
 
     override fun get(key: K, defaultValue: V): V {
@@ -489,47 +455,45 @@ open class SimpleHashMapROImpl_Int_Float
 class SimpleHashMapImpl_Int_Float
 @JvmOverloads constructor(
         version: Long,
-        file: RefCounted<MappedFile>,
+        private val file: RefCounted<MutableIOBuffer>,
         statsCollector: StatsCollector = DummyStatsCollector()
 ) : SimpleHashMap_Int_Float, SimpleHashMapROImpl_Int_Float(
         version,
         file,
         statsCollector
 ) {
-    inner class Iterator : SimpleHashMapIterator_Int_Float {
-        private var curBucketIx = -1
-        private var curBucketOffset = -1
+    private val buffer = file.get()
 
-        override fun next(): Boolean {
-            while (true) {
-                curBucketIx++
-                if (curBucketIx >= capacity) {
-                    return false
-                }
-                val pageOffset = getPageOffset(curBucketIx)
-                val bucketOffset = getBucketOffset(pageOffset, curBucketIx)
-                if (isBucketOccupied(readBucketMeta(bucketOffset))) {
-                    curBucketOffset = bucketOffset
-                    return true
-                }
-            }
-        }
-        override fun key(): Int {
-            if (curBucketIx >= capacity) {
-                throw IndexOutOfBoundsException()
-            }
-            return readKey(curBucketOffset)
-        }
-        override fun value(): Float {
-            if (curBucketIx >= capacity) {
-                throw IndexOutOfBoundsException()
-            }
-            return readValue(curBucketOffset)
-        }
+    protected fun writeSize(size: Int) {
+        buffer.writeIntOrdered(SimpleHashMap_Int_Float.Header.SIZE_OFFSET, size)
     }
 
-    override fun iterator(): SimpleHashMapIterator_Int_Float {
-        return Iterator()
+    protected fun writeTombstones(tombstones: Int) {
+        buffer.writeIntOrdered(SimpleHashMap_Int_Float.Header.TOMBSTONES_OFFSET, tombstones)
+    }
+
+    protected fun writeBucketMeta(bucketOffset: Int, tag: Int, version: Int) {
+        buffer.writeShortVolatile(
+                bucketOffset + SimpleHashMap_Int_Float.bucketLayout.metaOffset,
+                (tag or (version and SimpleHashMap_Int_Float.VER_TAG_MASK)).toShort()
+        )
+    }
+
+    protected fun writeKey(bucketOffset: Int, key: K) {
+        SimpleHashMap_Int_Float.keySerializer.write(
+                buffer, bucketOffset + SimpleHashMap_Int_Float.bucketLayout.keyOffset, key
+        )
+    }
+
+    protected fun writeValue(bucketOffset: Int, value: V) {
+        SimpleHashMap_Int_Float.valueSerializer.write(
+                buffer, bucketOffset + SimpleHashMap_Int_Float.bucketLayout.valueOffset, value
+        )
+    }
+
+    protected fun writeBucketData(bucketOffset: Int, key: K, value: V) {
+        writeValue(bucketOffset, value)
+        writeKey(bucketOffset, key)
     }
 
     override fun put(key: K, value: V): PutResult {
@@ -605,5 +569,41 @@ class SimpleHashMapImpl_Int_Float
         }
 
         return cleaned
+    }
+
+    override fun iterator(): SimpleHashMapIterator_Int_Float {
+        return Iterator()
+    }
+
+    inner class Iterator : SimpleHashMapIterator_Int_Float {
+        private var curBucketIx = -1
+        private var curBucketOffset = -1
+
+        override fun next(): Boolean {
+            while (true) {
+                curBucketIx++
+                if (curBucketIx >= capacity) {
+                    return false
+                }
+                val pageOffset = getPageOffset(curBucketIx)
+                val bucketOffset = getBucketOffset(pageOffset, curBucketIx)
+                if (isBucketOccupied(readBucketMeta(bucketOffset))) {
+                    curBucketOffset = bucketOffset
+                    return true
+                }
+            }
+        }
+        override fun key(): Int {
+            if (curBucketIx >= capacity) {
+                throw IndexOutOfBoundsException()
+            }
+            return readKey(curBucketOffset)
+        }
+        override fun value(): Float {
+            if (curBucketIx >= capacity) {
+                throw IndexOutOfBoundsException()
+            }
+            return readValue(curBucketOffset)
+        }
     }
 }

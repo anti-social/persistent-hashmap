@@ -1,9 +1,10 @@
 package company.evo.persistent.hashmap.simple;
 
+import company.evo.io.IOBuffer;
+import company.evo.io.MutableIOBuffer;
+import company.evo.io.MutableUnsafeBuffer;
+import company.evo.io.UnsafeBuffer;
 import company.evo.rc.AtomicRefCounted;
-import company.evo.persistent.MappedFile;
-
-import org.agrona.concurrent.UnsafeBuffer;
 
 import org.openjdk.jcstress.annotations.*;
 import org.openjdk.jcstress.infra.results.FFFF_Result;
@@ -25,22 +26,23 @@ public class SimpleHashMapStressTest {
                 5, 0.75,
                 SimpleHashMap_Int_Float.Companion.getBucketLayout().getSize()
         );
-        ByteBuffer buffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize()).order(ByteOrder.nativeOrder());
-        SimpleHashMap_Int_Float.Companion.initBuffer(new UnsafeBuffer(buffer), mapInfo);
-        MappedFile file = new MappedFile(new UnsafeBuffer(buffer), buffer);
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize());
+        MutableIOBuffer buffer = new MutableUnsafeBuffer(byteBuffer);
+        SimpleHashMap_Int_Float.Companion.initBuffer(buffer, mapInfo);
         map = new SimpleHashMapImpl_Int_Float(
                 0L,
-                new AtomicRefCounted<>(file, (f) -> Unit.INSTANCE),
+                new AtomicRefCounted<>(buffer, (buf) -> Unit.INSTANCE),
                 new DummyStatsCollector()
         );
         assert map.getCapacity() == 7;
         map.put(-6, -106);
         map.put(8, 108);
-        ByteBuffer roBuffer = buffer.duplicate().clear().order(ByteOrder.nativeOrder());
-        MappedFile roFile = new MappedFile(new UnsafeBuffer(roBuffer), roBuffer);
+
+        ByteBuffer roByteBuffer = byteBuffer.duplicate().clear();
+        IOBuffer roBuffer = new UnsafeBuffer(roByteBuffer);
         mapRO = new SimpleHashMapROImpl_Int_Float(
                 0L,
-                new AtomicRefCounted<>(roFile, (f) -> Unit.INSTANCE),
+                new AtomicRefCounted<>(roBuffer, (buf) -> Unit.INSTANCE),
                 new DummyStatsCollector()
         );
     }

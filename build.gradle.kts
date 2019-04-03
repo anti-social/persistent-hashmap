@@ -33,7 +33,6 @@ dependencies {
 
     compile(kotlin("stdlib-jdk8"))
     compile(kotlin("reflect"))
-    compile("org.agrona", "agrona", "0.9.33")
 
     testCompile("io.kotlintest", "kotlintest-core", kotlintestVersion)
     testCompile("io.kotlintest", "kotlintest-assertions", kotlintestVersion)

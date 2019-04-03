@@ -1,18 +1,16 @@
 package company.evo.persistent.hashmap.simple
 
+import company.evo.io.IOBuffer
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
 import company.evo.persistent.FileDoesNotExistException
-import company.evo.persistent.MappedFile
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.rc.RefCounted
 import company.evo.rc.use
-
-import org.agrona.concurrent.UnsafeBuffer
 
 abstract class SimpleHashMapBaseEnv(
         protected val dir: VersionedDirectory,
@@ -35,7 +33,7 @@ class SimpleHashMapROEnv_Int_Float (
 
     private data class VersionedFile(
             val version: Long,
-            val file: RefCounted<MappedFile>
+            val file: RefCounted<IOBuffer>
     )
 
     private val lock = ReentrantLock()
@@ -191,8 +189,8 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mapInfo = MapInfo.calcFor(
                     initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
             )
-            dir.createFile(filename, mapInfo.bufferSize).use { mappedFile ->
-                SimpleHashMap_Int_Float.initBuffer(UnsafeBuffer(mappedFile.buffer), mapInfo)
+            dir.createFile(filename, mapInfo.bufferSize).use { buffer ->
+                SimpleHashMap_Int_Float.initBuffer(buffer, mapInfo)
             }
             return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
         }
@@ -220,7 +218,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
             val mappedFile = dir.createFile(
                     newMapFilename, mapInfo.bufferSize
             )
-            val mappedBuffer = mappedFile.retain()?.buffer
+            val mappedBuffer = mappedFile.retain()
                     ?: throw IllegalStateException("Somehow the file just created has been released")
             SimpleHashMap_Int_Float.initBuffer(mappedBuffer, mapInfo)
             val newMap = SimpleHashMap_Int_Float.create(newVersion, mappedFile)
