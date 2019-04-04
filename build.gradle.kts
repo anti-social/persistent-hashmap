@@ -31,15 +31,14 @@ dependencies {
     val kotlintestVersion = "3.1.11"
     val lincheckVersion = "2.0"
 
-    compile(kotlin("stdlib-jdk8"))
-    compile(kotlin("reflect"))
+    implementation(kotlin("stdlib-jdk8"))
+    implementation(kotlin("reflect"))
 
-    testCompile("io.kotlintest", "kotlintest-core", kotlintestVersion)
-    testCompile("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
-    testCompile("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
-    // testCompile("com.devexperts.lincheck", "lincheck", lincheckVersion)
-    testCompile("com.devexperts.lincheck:lincheck:$lincheckVersion")
-    testCompile("commons-io", "commons-io", "2.6")
+    testImplementation("io.kotlintest", "kotlintest-core", kotlintestVersion)
+    testImplementation("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
+    testImplementation("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
+    testImplementation("com.devexperts.lincheck", "lincheck", lincheckVersion)
+    testImplementation("commons-io", "commons-io", "2.6")
 }
 
 configure<JavaPluginConvention> {
