@@ -112,6 +112,7 @@ interface SimpleHashMapRO_Int_Float : AutoCloseable {
     val maxEntries: Int
     val capacity: Int
 
+    fun contains(key: K): Boolean
     fun get(key: K, defaultValue: V): V
     fun size(): Int
     fun tombstones(): Int
@@ -391,6 +392,33 @@ open class SimpleHashMapROImpl_Int_Float
         val rawValue = ByteArray(SimpleHashMap_Int_Float.valueSerializer.size)
         buffer.readBytes(bucketOffset + SimpleHashMap_Int_Float.bucketLayout.valueOffset, rawValue)
         return rawValue
+    }
+
+    override fun contains(key: K): Boolean {
+        find(
+                key,
+                found = { _, bucketOffset, meta, dist ->
+                    var m = meta
+                    while (true) {
+                        val meta2 = readBucketMeta(bucketOffset)
+                        if (m == meta2) {
+                            break
+                        }
+                        m = meta2
+                        if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
+                            statsCollector.addGet(false, dist)
+                            return false
+                        }
+                    }
+                    statsCollector.addGet(true, dist)
+                    return true
+                },
+                notFound = { _, _, _, _, dist ->
+                    statsCollector.addGet(false, dist)
+                    return false
+                }
+        )
+        return false
     }
 
     override fun get(key: K, defaultValue: V): V {
