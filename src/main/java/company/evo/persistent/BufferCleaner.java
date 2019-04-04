@@ -28,7 +28,9 @@ class BufferCleaner {
     public static String UNMAP_NOT_SUPPORTED_REASON;
 
     static {
-        UnmapImplResult unmapImplResult = unmapImpl();
+        UnmapImplResult unmapImplResult = AccessController.doPrivileged(
+                (PrivilegedAction<UnmapImplResult>) BufferCleaner::unmapImpl
+        );
         BUFFER_CLEANER = unmapImplResult.bufferCleaner;
         UNMAP_NOT_SUPPORTED_REASON = unmapImplResult.notSupportedReason;
     }
