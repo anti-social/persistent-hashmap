@@ -9,6 +9,17 @@ interface Serializer<T> {
     fun hash(v: T): Int
     fun read(buf: IOBuffer, offset: Int): T
     fun write(buf: MutableIOBuffer, offset: Int, v: T)
+
+    companion object {
+        @Suppress("UNCHECKED_CAST")
+        fun <T> getForClass(clazz: Class<T>): Serializer<T> = when (clazz) {
+            Int::class.javaPrimitiveType -> Serializer_Int()
+            Long::class.javaPrimitiveType -> Serializer_Long()
+            Float::class.javaPrimitiveType -> Serializer_Float()
+            Double::class.javaPrimitiveType -> Serializer_Double()
+            else -> throw IllegalArgumentException("Unsupported class: $clazz")
+        } as Serializer<T>
+    }
 }
 
 class Serializer_Int : Serializer<Int> {

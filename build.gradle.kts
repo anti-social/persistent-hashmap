@@ -13,6 +13,7 @@ buildscript {
 plugins {
     java
     kotlin("jvm") version "1.3.21"
+    kotlin("kapt") version "1.3.21"
 }
 
 apply {
@@ -31,8 +32,11 @@ dependencies {
     val kotlintestVersion = "3.1.11"
     val lincheckVersion = "2.0"
 
-    implementation(kotlin("stdlib-jdk8"))
-    implementation(kotlin("reflect"))
+    compile(kotlin("stdlib-jdk8"))
+    compile(kotlin("reflect"))
+
+    implementation(project(":processor"))
+    kapt(project(":processor"))
 
     testImplementation("io.kotlintest", "kotlintest-core", kotlintestVersion)
     testImplementation("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
@@ -58,4 +62,10 @@ val test by tasks.getting(Test::class) {
 
 configure<JcstressPluginExtension> {
     jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
+}
+
+kapt {
+    arguments {
+        arg("kotlin.source", kotlin.sourceSets["main"].kotlin.srcDirs.first())
+    }
 }

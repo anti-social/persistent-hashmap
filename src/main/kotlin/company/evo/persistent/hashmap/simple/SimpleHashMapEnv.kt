@@ -13,7 +13,7 @@ import company.evo.persistent.VersionedRamDirectory
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
-abstract class SimpleHashMapBaseEnv(
+abstract class SimpleHashMapBaseEnv protected constructor(
         protected val dir: VersionedDirectory,
         val collectStats: Boolean
 ) : AutoCloseable
@@ -27,8 +27,9 @@ abstract class SimpleHashMapBaseEnv(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class SimpleHashMapROEnv_Int_Float (
+class SimpleHashMapROEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> (
         dir: VersionedDirectory,
+        protected val mapProvider: SimpleHashMapProvider<K, V, W, RO>,
         collectStats: Boolean = false
 ) : SimpleHashMapBaseEnv(dir, collectStats) {
 
@@ -70,7 +71,7 @@ class SimpleHashMapROEnv_Int_Float (
         }
     }
 
-    fun getCurrentMap(): SimpleHashMapRO_Int_Float {
+    fun getCurrentMap(): RO {
         var curFile: VersionedFile
         // Retain a map file
         while (true) {
@@ -100,7 +101,7 @@ class SimpleHashMapROEnv_Int_Float (
         }
 
         // File will be released when closing a hash map
-        return SimpleHashMapRO_Int_Float.create(curFile.version, curFile.file, collectStats)
+        return mapProvider.createReadOnly(curFile.version, curFile.file, collectStats)
     }
 
     override fun close() {
@@ -109,20 +110,18 @@ class SimpleHashMapROEnv_Int_Float (
     }
 }
 
-class SimpleHashMapEnv_Int_Float private constructor(
+class SimpleHashMapEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> private constructor(
         dir: VersionedDirectory,
         val loadFactor: Double,
+        private val mapProvider: SimpleHashMapProvider<K, V, W, RO>,
         collectStats: Boolean = false
 ) : SimpleHashMapBaseEnv(dir, collectStats) {
-    class Builder {
+
+    class Builder<K, V, W: SimpleHashMap, RO: SimpleHashMap>(private val mapProvider: SimpleHashMapProvider<K, V, W, RO>) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_INITIAL_ENTRIES = 1024
             private const val DEFAULT_LOAD_FACTOR = 0.75
-
-            operator fun invoke(): Builder {
-                return Builder()
-            }
         }
 
         var initialEntries: Int = DEFAULT_INITIAL_ENTRIES
@@ -157,7 +156,7 @@ class SimpleHashMapEnv_Int_Float private constructor(
             this.useUnmapHack = useUnmapHack
         }
 
-        fun open(path: Path): SimpleHashMapEnv_Int_Float {
+        fun open(path: Path): SimpleHashMapEnv<K, V, W, RO> {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
             return if (dir.created) {
@@ -167,52 +166,56 @@ class SimpleHashMapEnv_Int_Float private constructor(
             }
         }
 
-        fun openReadOnly(path: Path): SimpleHashMapROEnv_Int_Float {
+        fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V, W, RO> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
-            return SimpleHashMapROEnv_Int_Float(dir, collectStats)
+            return SimpleHashMapROEnv(dir, mapProvider, collectStats)
         }
 
-        fun createAnonymousDirect(): SimpleHashMapEnv_Int_Float {
+        fun createAnonymousDirect(): SimpleHashMapEnv<K, V, W, RO> {
             val dir = VersionedRamDirectory.createDirect()
             dir.useUnmapHack = useUnmapHack
             return create(dir)
         }
 
-        fun createAnonymousHeap(): SimpleHashMapEnv_Int_Float {
+        fun createAnonymousHeap(): SimpleHashMapEnv<K, V, W, RO> {
             val dir = VersionedRamDirectory.createHeap()
             return create(dir)
         }
 
-        private fun create(dir: VersionedDirectory): SimpleHashMapEnv_Int_Float {
+        private fun create(dir: VersionedDirectory): SimpleHashMapEnv<K, V, W, RO> {
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
-                    initialEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
+                    initialEntries, loadFactor, mapProvider.bucketLayout.size
             )
             dir.createFile(filename, mapInfo.bufferSize).use { file ->
-                SimpleHashMap_Int_Float.initBuffer(file.buffer, mapInfo)
+                mapInfo.initBuffer(
+                        file.buffer,
+                        mapProvider.keySerializer,
+                        mapProvider.valueSerializer
+                )
             }
-            return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
+            return SimpleHashMapEnv(dir, loadFactor, mapProvider, collectStats)
         }
 
-        private fun openWritable(dir: VersionedDirectory): SimpleHashMapEnv_Int_Float {
-            return SimpleHashMapEnv_Int_Float(dir, loadFactor, collectStats)
+        private fun openWritable(dir: VersionedDirectory): SimpleHashMapEnv<K, V, W, RO> {
+            return SimpleHashMapEnv(dir, loadFactor, mapProvider, collectStats)
         }
     }
 
-    fun openMap(): SimpleHashMap_Int_Float {
+    fun openMap(): W {
         val ver = dir.readVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return SimpleHashMap_Int_Float.create(ver, mapBuffer)
+        return mapProvider.createWritable(ver, mapBuffer)
     }
 
-    fun copyMap(map: SimpleHashMap_Int_Float): SimpleHashMap_Int_Float {
+    fun copyMap(map: W): W {
         val newVersion = map.version + 1
         var newMaxEntries = map.size() * 2
         while (true) {
             val newMapInfo = MapInfo.calcFor(
-                    newMaxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size
+                    newMaxEntries, loadFactor, mapProvider.bucketLayout.size
             )
             // TODO Write into temporary file then rename
             val newMapFilename = getHashmapFilename(newVersion)
@@ -220,17 +223,20 @@ class SimpleHashMapEnv_Int_Float private constructor(
                     newMapFilename, newMapInfo.bufferSize
             )
             val newMappedBuffer = newMappedFile.get().buffer
-            SimpleHashMap_Int_Float.initBuffer(newMappedBuffer, newMapInfo)
-            SimpleHashMap_Int_Float.create(newVersion, newMappedFile).use { newMap ->
-                val iterator = map.iterator()
-                while (iterator.next()) {
-                    if (newMap.put(iterator.key(), iterator.value()) == PutResult.OVERFLOW) {
-                        newMaxEntries *= 2
-                        dir.deleteFile(newMapFilename)
-                        continue
-                    }
+            newMapInfo.initBuffer(
+                    newMappedBuffer,
+                    mapProvider.keySerializer,
+                    mapProvider.valueSerializer
+            )
+            if (!mapProvider.createWritable(newVersion, newMappedFile).use { newMap ->
+                if (!mapProvider.copyMap(map, newMap)) {
+                    newMaxEntries *= 2
+                    dir.deleteFile(newMapFilename)
+                    false
+                } else {
+                    true
                 }
-            }
+            }) continue
             break
         }
         dir.writeVersion(newVersion)

@@ -24,11 +24,15 @@ public class SimpleHashMapStressTest {
     public SimpleHashMapStressTest() {
         MapInfo mapInfo = MapInfo.Companion.calcFor(
                 5, 0.75,
-                SimpleHashMap_Int_Float.Companion.getBucketLayout().getSize()
+                SimpleHashMapProvider_Int_Float.INSTANCE.getBucketLayout().getSize()
         );
         ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize());
         MutableIOBuffer buffer = new MutableUnsafeBuffer(byteBuffer);
-        SimpleHashMap_Int_Float.Companion.initBuffer(buffer, mapInfo);
+        mapInfo.initBuffer(
+                buffer,
+                SimpleHashMapProvider_Int_Float.INSTANCE.getKeySerializer(),
+                SimpleHashMapProvider_Int_Float.INSTANCE.getValueSerializer()
+        );
         map = new SimpleHashMapImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
