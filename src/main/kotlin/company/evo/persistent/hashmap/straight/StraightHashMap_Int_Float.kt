@@ -65,7 +65,7 @@ interface StraightHashMapIterator_Int_Float {
 
 @KeyValueTemplate(
         keyTypes = ["Long"],
-        valueTypes = ["Double"]
+        valueTypes = ["Short", "Int", "Long", "Double"]
 )
 interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float {
     fun put(key: K, value: V): PutResult

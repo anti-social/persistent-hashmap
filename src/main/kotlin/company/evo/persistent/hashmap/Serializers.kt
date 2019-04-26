@@ -22,6 +22,22 @@ interface Serializer<T> {
     }
 }
 
+class Serializer_Short : Serializer<Short> {
+    override val serial = 1L
+    override val size = 2
+    override fun hash(v: Short): Int {
+        var x = v.toInt()
+        x = ((x ushr 16) xor x) * 0x45d9f3b
+        x = ((x ushr 16) xor x) * 0x45d9f3b
+        x = (x ushr 16) xor x
+        return x
+    }
+    override fun read(buf: IOBuffer, offset: Int) = buf.readShort(offset)
+    override fun write(buf: MutableIOBuffer, offset: Int, v: Short) {
+        buf.writeShort(offset, v)
+    }
+}
+
 class Serializer_Int : Serializer<Int> {
     override val serial = 2L
     override val size = 4
