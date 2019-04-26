@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple.keyTypes.Int
+package company.evo.persistent.hashmap.straight.keyTypes.Int
 
 import company.evo.persistent.hashmap.Serializer_Int
 

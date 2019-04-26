@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
@@ -11,7 +11,7 @@ import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
 
-class SimpleHashMapTests : StringSpec() {
+class StraightHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
     private val random = Random(seed)
 
@@ -322,38 +322,38 @@ class SimpleHashMapTests : StringSpec() {
     companion object {
         private fun createMap_Int_Float(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap_Int_Float {
+        ): StraightHashMap_Int_Float {
             val mapInfo = MapInfo.calcFor(
-                    maxEntries, loadFactor, SimpleHashMapProvider_Int_Float.bucketLayout.size
+                    maxEntries, loadFactor, StraightHashMapProvider_Int_Float.bucketLayout.size
             )
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             mapInfo.initBuffer(
                     MutableUnsafeBuffer(buffer),
-                    SimpleHashMapProvider_Int_Float.keySerializer,
-                    SimpleHashMapProvider_Int_Float.valueSerializer
+                    StraightHashMapProvider_Int_Float.keySerializer,
+                    StraightHashMapProvider_Int_Float.valueSerializer
             )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
             ) {}
-            return SimpleHashMapImpl_Int_Float(0L, file)
+            return StraightHashMapImpl_Int_Float(0L, file)
         }
 
         private fun createMap_Long_Double(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap_Long_Double {
+        ): StraightHashMap_Long_Double {
             val mapInfo = MapInfo.calcFor(
-                    maxEntries, loadFactor, SimpleHashMapProvider_Long_Double.bucketLayout.size
+                    maxEntries, loadFactor, StraightHashMapProvider_Long_Double.bucketLayout.size
             )
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             mapInfo.initBuffer(
                     MutableUnsafeBuffer(buffer),
-                    SimpleHashMapProvider_Long_Double.keySerializer,
-                    SimpleHashMapProvider_Long_Double.valueSerializer
+                    StraightHashMapProvider_Long_Double.keySerializer,
+                    StraightHashMapProvider_Long_Double.valueSerializer
             )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
             ) {}
-            return SimpleHashMapProvider_Long_Double.createWritable(0L, file)
+            return StraightHashMapProvider_Long_Double.createWritable(0L, file)
         }
     }
 }

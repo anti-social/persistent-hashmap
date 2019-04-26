@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import company.evo.io.IOBuffer
 import java.nio.file.Path
@@ -13,7 +13,7 @@ import company.evo.persistent.VersionedRamDirectory
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
-abstract class SimpleHashMapBaseEnv protected constructor(
+abstract class StraightHashMapBaseEnv protected constructor(
         protected val dir: VersionedDirectory,
         val collectStats: Boolean
 ) : AutoCloseable
@@ -27,11 +27,11 @@ abstract class SimpleHashMapBaseEnv protected constructor(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class SimpleHashMapROEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> (
+class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
         dir: VersionedDirectory,
-        protected val mapProvider: SimpleHashMapProvider<K, V, W, RO>,
+        protected val mapProvider: StraightHashMapProvider<K, V, W, RO>,
         collectStats: Boolean = false
-) : SimpleHashMapBaseEnv(dir, collectStats) {
+) : StraightHashMapBaseEnv(dir, collectStats) {
 
     private data class VersionedFile(
             val version: Long,
@@ -110,14 +110,14 @@ class SimpleHashMapROEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> (
     }
 }
 
-class SimpleHashMapEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> private constructor(
+class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private constructor(
         dir: VersionedDirectory,
         val loadFactor: Double,
-        private val mapProvider: SimpleHashMapProvider<K, V, W, RO>,
+        private val mapProvider: StraightHashMapProvider<K, V, W, RO>,
         collectStats: Boolean = false
-) : SimpleHashMapBaseEnv(dir, collectStats) {
+) : StraightHashMapBaseEnv(dir, collectStats) {
 
-    class Builder<K, V, W: SimpleHashMap, RO: SimpleHashMap>(private val mapProvider: SimpleHashMapProvider<K, V, W, RO>) {
+    class Builder<K, V, W: StraightHashMap, RO: StraightHashMap>(private val mapProvider: StraightHashMapProvider<K, V, W, RO>) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_INITIAL_ENTRIES = 1024
@@ -156,7 +156,7 @@ class SimpleHashMapEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> private constr
             this.useUnmapHack = useUnmapHack
         }
 
-        fun open(path: Path): SimpleHashMapEnv<K, V, W, RO> {
+        fun open(path: Path): StraightHashMapEnv<K, V, W, RO> {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
             return if (dir.created) {
@@ -166,24 +166,24 @@ class SimpleHashMapEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> private constr
             }
         }
 
-        fun openReadOnly(path: Path): SimpleHashMapROEnv<K, V, W, RO> {
+        fun openReadOnly(path: Path): StraightHashMapROEnv<K, V, W, RO> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
-            return SimpleHashMapROEnv(dir, mapProvider, collectStats)
+            return StraightHashMapROEnv(dir, mapProvider, collectStats)
         }
 
-        fun createAnonymousDirect(): SimpleHashMapEnv<K, V, W, RO> {
+        fun createAnonymousDirect(): StraightHashMapEnv<K, V, W, RO> {
             val dir = VersionedRamDirectory.createDirect()
             dir.useUnmapHack = useUnmapHack
             return create(dir)
         }
 
-        fun createAnonymousHeap(): SimpleHashMapEnv<K, V, W, RO> {
+        fun createAnonymousHeap(): StraightHashMapEnv<K, V, W, RO> {
             val dir = VersionedRamDirectory.createHeap()
             return create(dir)
         }
 
-        private fun create(dir: VersionedDirectory): SimpleHashMapEnv<K, V, W, RO> {
+        private fun create(dir: VersionedDirectory): StraightHashMapEnv<K, V, W, RO> {
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
@@ -196,11 +196,11 @@ class SimpleHashMapEnv<K, V, W: SimpleHashMap, RO: SimpleHashMap> private constr
                         mapProvider.valueSerializer
                 )
             }
-            return SimpleHashMapEnv(dir, loadFactor, mapProvider, collectStats)
+            return StraightHashMapEnv(dir, loadFactor, mapProvider, collectStats)
         }
 
-        private fun openWritable(dir: VersionedDirectory): SimpleHashMapEnv<K, V, W, RO> {
-            return SimpleHashMapEnv(dir, loadFactor, mapProvider, collectStats)
+        private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<K, V, W, RO> {
+            return StraightHashMapEnv(dir, loadFactor, mapProvider, collectStats)
         }
     }
 

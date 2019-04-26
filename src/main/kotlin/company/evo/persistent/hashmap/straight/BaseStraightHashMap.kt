@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
@@ -16,14 +16,14 @@ enum class PutResult {
     OK, OVERFLOW
 }
 
-interface SimpleHashMap : AutoCloseable {
+interface StraightHashMap : AutoCloseable {
     val version: Long
     val maxEntries: Int
     val capacity: Int
     fun size(): Int
 }
 
-interface SimpleHashMapProvider<K, V, W: SimpleHashMap, RO: SimpleHashMap> {
+interface StraightHashMapProvider<K, V, W: StraightHashMap, RO: StraightHashMap> {
     val bucketLayout: BucketLayout
     val keySerializer: Serializer<K>
     val valueSerializer: Serializer<V>
@@ -190,7 +190,7 @@ class Header<K, V>(
     }
 
     override fun toString(): String {
-        return "SimpleHashMap.Header<" +
+        return "${this::class.qualifiedName}<" +
                 "capacity = $capacity, " +
                 "maxEntries = $maxEntries" +
                 ">"

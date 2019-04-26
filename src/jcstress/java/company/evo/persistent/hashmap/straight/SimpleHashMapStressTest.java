@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple;
+package company.evo.persistent.hashmap.straight;
 
 import company.evo.io.IOBuffer;
 import company.evo.io.MutableIOBuffer;
@@ -18,22 +18,22 @@ import kotlin.Unit;
 @Outcome(id = "108.0, 108.0, 108.0, 108.0", expect = Expect.ACCEPTABLE, desc = "Ok")
 @State
 public class SimpleHashMapStressTest {
-    private final SimpleHashMap_Int_Float map;
-    private final SimpleHashMapRO_Int_Float mapRO;
+    private final StraightHashMap_Int_Float map;
+    private final StraightHashMapRO_Int_Float mapRO;
 
     public SimpleHashMapStressTest() {
         MapInfo mapInfo = MapInfo.Companion.calcFor(
                 5, 0.75,
-                SimpleHashMapProvider_Int_Float.INSTANCE.getBucketLayout().getSize()
+                StraightHashMapProvider_Int_Float.INSTANCE.getBucketLayout().getSize()
         );
         ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize());
         MutableIOBuffer buffer = new MutableUnsafeBuffer(byteBuffer);
         mapInfo.initBuffer(
                 buffer,
-                SimpleHashMapProvider_Int_Float.INSTANCE.getKeySerializer(),
-                SimpleHashMapProvider_Int_Float.INSTANCE.getValueSerializer()
+                StraightHashMapProvider_Int_Float.INSTANCE.getKeySerializer(),
+                StraightHashMapProvider_Int_Float.INSTANCE.getValueSerializer()
         );
-        map = new SimpleHashMapImpl_Int_Float(
+        map = new StraightHashMapImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
                         new MappedFile<>("<map>", buffer),
@@ -47,7 +47,7 @@ public class SimpleHashMapStressTest {
 
         ByteBuffer roByteBuffer = byteBuffer.duplicate().clear();
         IOBuffer roBuffer = new UnsafeBuffer(roByteBuffer);
-        mapRO = new SimpleHashMapROImpl_Int_Float(
+        mapRO = new StraightHashMapROImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
                         new MappedFile<>("<ro-map>", roBuffer),
