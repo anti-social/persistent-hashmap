@@ -3,7 +3,10 @@ jdk:
 - openjdk11
 
 script:
-- ./gradlew test --no-daemon --info --stacktrace
+- |
+  GRADLE_ARGS="--no-daemon --info --stacktrace"
+  ./gradlew test $GRADLE_ARGS
+  ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
 
 before_cache:
 - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock

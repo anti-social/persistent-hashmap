@@ -2,6 +2,8 @@ package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.Hash32
+import company.evo.persistent.hashmap.Hash64
 import company.evo.rc.AtomicRefCounted
 
 import java.nio.ByteBuffer
@@ -324,13 +326,14 @@ class StraightHashMapTests : StringSpec() {
                 maxEntries: Int, loadFactor: Double = 0.75
         ): StraightHashMap_Int_Float {
             val mapInfo = MapInfo.calcFor(
-                    maxEntries, loadFactor, StraightHashMapProvider_Int_Float.bucketLayout.size
+                    maxEntries, loadFactor, StraightHashMapType_Int_Float.bucketLayout.size
             )
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             mapInfo.initBuffer(
                     MutableUnsafeBuffer(buffer),
-                    StraightHashMapProvider_Int_Float.keySerializer,
-                    StraightHashMapProvider_Int_Float.valueSerializer
+                    StraightHashMapType_Int_Float.keySerializer,
+                    StraightHashMapType_Int_Float.valueSerializer,
+                    StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
             )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
@@ -342,18 +345,19 @@ class StraightHashMapTests : StringSpec() {
                 maxEntries: Int, loadFactor: Double = 0.75
         ): StraightHashMap_Long_Double {
             val mapInfo = MapInfo.calcFor(
-                    maxEntries, loadFactor, StraightHashMapProvider_Long_Double.bucketLayout.size
+                    maxEntries, loadFactor, StraightHashMapType_Long_Double.bucketLayout.size
             )
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
             mapInfo.initBuffer(
                     MutableUnsafeBuffer(buffer),
-                    StraightHashMapProvider_Long_Double.keySerializer,
-                    StraightHashMapProvider_Long_Double.valueSerializer
+                    StraightHashMapType_Long_Double.keySerializer,
+                    StraightHashMapType_Long_Double.valueSerializer,
+                    StraightHashMapType_Long_Double.hasherProvider.getHasher(Hash64.serial)
             )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
             ) {}
-            return StraightHashMapProvider_Long_Double.createWritable(0L, file)
+            return StraightHashMapType_Long_Double.createWritable(0L, file)
         }
     }
 }

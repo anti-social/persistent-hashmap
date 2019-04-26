@@ -10,7 +10,8 @@ import company.evo.persistent.hashmap.straight.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
-object StraightHashMapProvider_Int_Float : StraightHashMapProvider<K, V, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float> {
+object StraightHashMapType_Int_Float : StraightHashMapType<K, V, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float> {
+    override val hasherProvider = HasherProvider_K
     override val keySerializer = Serializer_K()
     override val valueSerializer = Serializer_V()
     override val bucketLayout = BucketLayout(MapInfo.META_SIZE, keySerializer.size, valueSerializer.size)
@@ -89,9 +90,11 @@ open class StraightHashMapROImpl_Int_Float
         }
     }
 
-    val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapProvider_Int_Float.bucketLayout.size)
+    val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
 
     val header = Header.load(buffer, K::class.java, V::class.java)
+    protected val hasher = header.hasher
+
     final override val maxEntries = header.maxEntries
     final override val capacity = header.capacity
 
@@ -109,7 +112,7 @@ open class StraightHashMapROImpl_Int_Float
     override fun dump(dumpContent: Boolean): String {
         val indexPad = capacity.toString().length
         val description = """Header: $header
-            |Bucket layout: ${StraightHashMapProvider_Int_Float.bucketLayout}
+            |Bucket layout: ${StraightHashMapType_Int_Float.bucketLayout}
             |Size: ${size()}
             |Tombstones: ${tombstones()}
         """.trimMargin()
@@ -160,7 +163,7 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun getBucketOffset(pageOffset: Int, bucketIx: Int): Int {
         return pageOffset + MapInfo.DATA_PAGE_HEADER_SIZE +
-                (bucketIx % bucketsPerPage) * StraightHashMapProvider_Int_Float.bucketLayout.size
+                (bucketIx % bucketsPerPage) * StraightHashMapType_Int_Float.bucketLayout.size
     }
 
     protected fun readSize(): Int {
@@ -173,31 +176,31 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun readBucketMeta(bucketOffset: Int): Int {
         return buffer.readShortVolatile(
-                bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.metaOffset
+                bucketOffset + StraightHashMapType_Int_Float.bucketLayout.metaOffset
         ).toInt() and 0xFFFF
     }
 
     protected fun readKey(bucketOffset: Int): K {
-        return StraightHashMapProvider_Int_Float.keySerializer.read(
-                buffer, bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.keyOffset
+        return StraightHashMapType_Int_Float.keySerializer.read(
+                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset
         )
     }
 
     protected fun readValue(bucketOffset: Int): V {
-        return StraightHashMapProvider_Int_Float.valueSerializer.read(
-                buffer, bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.valueOffset
+        return StraightHashMapType_Int_Float.valueSerializer.read(
+                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset
         )
     }
 
     private fun readRawKey(bucketOffset: Int): ByteArray {
-        val rawKey = ByteArray(StraightHashMapProvider_Int_Float.keySerializer.size)
-        buffer.readBytes(bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.keyOffset, rawKey)
+        val rawKey = ByteArray(StraightHashMapType_Int_Float.keySerializer.size)
+        buffer.readBytes(bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset, rawKey)
         return rawKey
     }
 
     private fun readRawValue(bucketOffset: Int): ByteArray {
-        val rawValue = ByteArray(StraightHashMapProvider_Int_Float.valueSerializer.size)
-        buffer.readBytes(bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.valueOffset, rawValue)
+        val rawValue = ByteArray(StraightHashMapType_Int_Float.valueSerializer.size)
+        buffer.readBytes(bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset, rawValue)
         return rawValue
     }
 
@@ -262,7 +265,7 @@ open class StraightHashMapROImpl_Int_Float
             found: (bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int) -> Unit,
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
-        val hash = StraightHashMapProvider_Int_Float.keySerializer.hash(key)
+        val hash = hasher(key)
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
@@ -311,20 +314,20 @@ class StraightHashMapImpl_Int_Float
 
     protected fun writeBucketMeta(bucketOffset: Int, tag: Int, version: Int) {
         buffer.writeShortVolatile(
-                bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.metaOffset,
+                bucketOffset + StraightHashMapType_Int_Float.bucketLayout.metaOffset,
                 (tag or (version and MapInfo.VER_TAG_MASK)).toShort()
         )
     }
 
     protected fun writeKey(bucketOffset: Int, key: K) {
-        StraightHashMapProvider_Int_Float.keySerializer.write(
-                buffer, bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.keyOffset, key
+        StraightHashMapType_Int_Float.keySerializer.write(
+                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset, key
         )
     }
 
     protected fun writeValue(bucketOffset: Int, value: V) {
-        StraightHashMapProvider_Int_Float.valueSerializer.write(
-                buffer, bucketOffset + StraightHashMapProvider_Int_Float.bucketLayout.valueOffset, value
+        StraightHashMapType_Int_Float.valueSerializer.write(
+                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset, value
         )
     }
 

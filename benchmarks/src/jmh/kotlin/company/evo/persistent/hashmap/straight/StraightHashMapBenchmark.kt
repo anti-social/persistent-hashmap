@@ -2,6 +2,7 @@ package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.Hash32
 import company.evo.rc.AtomicRefCounted
 
 import org.openjdk.jmh.annotations.Benchmark
@@ -25,13 +26,14 @@ open class StraightHashMapBenchmark {
             val mapInfo = MapInfo.calcFor(
                     entries,
                     0.5,
-                    StraightHashMapProvider_Int_Float.bucketLayout.size
+                    StraightHashMapType_Int_Float.bucketLayout.size
             )
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
             mapInfo.initBuffer(
                     MutableUnsafeBuffer(buffer),
-                    StraightHashMapProvider_Long_Double.keySerializer,
-                    StraightHashMapProvider_Long_Double.valueSerializer
+                    StraightHashMapType_Int_Float.keySerializer,
+                    StraightHashMapType_Int_Float.valueSerializer,
+                    StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
             )
             map = StraightHashMapImpl_Int_Float(
                     0L,

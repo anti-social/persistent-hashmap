@@ -5,6 +5,7 @@ import company.evo.io.MutableIOBuffer;
 import company.evo.io.MutableUnsafeBuffer;
 import company.evo.io.UnsafeBuffer;
 import company.evo.persistent.MappedFile;
+import company.evo.persistent.hashmap.Hash32;
 import company.evo.rc.AtomicRefCounted;
 
 import org.openjdk.jcstress.annotations.*;
@@ -24,14 +25,16 @@ public class SimpleHashMapStressTest {
     public SimpleHashMapStressTest() {
         MapInfo mapInfo = MapInfo.Companion.calcFor(
                 5, 0.75,
-                StraightHashMapProvider_Int_Float.INSTANCE.getBucketLayout().getSize()
+                StraightHashMapType_Int_Float.INSTANCE.getBucketLayout().getSize()
         );
         ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize());
         MutableIOBuffer buffer = new MutableUnsafeBuffer(byteBuffer);
         mapInfo.initBuffer(
                 buffer,
-                StraightHashMapProvider_Int_Float.INSTANCE.getKeySerializer(),
-                StraightHashMapProvider_Int_Float.INSTANCE.getValueSerializer()
+                StraightHashMapType_Int_Float.INSTANCE.getKeySerializer(),
+                StraightHashMapType_Int_Float.INSTANCE.getValueSerializer(),
+                StraightHashMapType_Int_Float.INSTANCE.getHasherProvider()
+                        .getHasher(Hash32.INSTANCE.getSerial())
         );
         map = new StraightHashMapImpl_Int_Float(
                 0L,

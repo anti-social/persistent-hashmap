@@ -10,6 +10,7 @@ import company.evo.persistent.MappedFile
 import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
+import company.evo.persistent.hashmap.Hasher
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
@@ -29,7 +30,7 @@ abstract class StraightHashMapBaseEnv protected constructor(
 
 class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
         dir: VersionedDirectory,
-        protected val mapProvider: StraightHashMapProvider<K, V, W, RO>,
+        private val mapType: StraightHashMapType<K, V, W, RO>,
         collectStats: Boolean = false
 ) : StraightHashMapBaseEnv(dir, collectStats) {
 
@@ -101,7 +102,7 @@ class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
         }
 
         // File will be released when closing a hash map
-        return mapProvider.createReadOnly(curFile.version, curFile.file, collectStats)
+        return mapType.createReadOnly(curFile.version, curFile.file, collectStats)
     }
 
     override fun close() {
@@ -113,15 +114,25 @@ class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
 class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private constructor(
         dir: VersionedDirectory,
         val loadFactor: Double,
-        private val mapProvider: StraightHashMapProvider<K, V, W, RO>,
+        private val mapType: StraightHashMapType<K, V, W, RO>,
+        private val hasher: Hasher<K>,
         collectStats: Boolean = false
 ) : StraightHashMapBaseEnv(dir, collectStats) {
 
-    class Builder<K, V, W: StraightHashMap, RO: StraightHashMap>(private val mapProvider: StraightHashMapProvider<K, V, W, RO>) {
+    class Builder<K, V, W: StraightHashMap, RO: StraightHashMap>(private val mapType: StraightHashMapType<K, V, W, RO>) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_INITIAL_ENTRIES = 1024
             private const val DEFAULT_LOAD_FACTOR = 0.75
+        }
+
+        var hasher: Hasher<K> = mapType.hasherProvider.run {
+            getHasher(defaultHasherSerial)
+        }
+        fun hasher(serial: Long) = apply {
+            hasher = mapType.hasherProvider.run {
+                getHasher(serial)
+            }
         }
 
         var initialEntries: Int = DEFAULT_INITIAL_ENTRIES
@@ -169,7 +180,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         fun openReadOnly(path: Path): StraightHashMapROEnv<K, V, W, RO> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
-            return StraightHashMapROEnv(dir, mapProvider, collectStats)
+            return StraightHashMapROEnv(dir, mapType, collectStats)
         }
 
         fun createAnonymousDirect(): StraightHashMapEnv<K, V, W, RO> {
@@ -187,27 +198,28 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
-                    initialEntries, loadFactor, mapProvider.bucketLayout.size
+                    initialEntries, loadFactor, mapType.bucketLayout.size
             )
             dir.createFile(filename, mapInfo.bufferSize).use { file ->
                 mapInfo.initBuffer(
                         file.buffer,
-                        mapProvider.keySerializer,
-                        mapProvider.valueSerializer
+                        mapType.keySerializer,
+                        mapType.valueSerializer,
+                        hasher
                 )
             }
-            return StraightHashMapEnv(dir, loadFactor, mapProvider, collectStats)
+            return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
         }
 
         private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<K, V, W, RO> {
-            return StraightHashMapEnv(dir, loadFactor, mapProvider, collectStats)
+            return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
         }
     }
 
     fun openMap(): W {
         val ver = dir.readVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
-        return mapProvider.createWritable(ver, mapBuffer)
+        return mapType.createWritable(ver, mapBuffer)
     }
 
     fun copyMap(map: W): W {
@@ -215,7 +227,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         var newMaxEntries = map.size() * 2
         while (true) {
             val newMapInfo = MapInfo.calcFor(
-                    newMaxEntries, loadFactor, mapProvider.bucketLayout.size
+                    newMaxEntries, loadFactor, mapType.bucketLayout.size
             )
             // TODO Write into temporary file then rename
             val newMapFilename = getHashmapFilename(newVersion)
@@ -225,11 +237,12 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
             val newMappedBuffer = newMappedFile.get().buffer
             newMapInfo.initBuffer(
                     newMappedBuffer,
-                    mapProvider.keySerializer,
-                    mapProvider.valueSerializer
+                    mapType.keySerializer,
+                    mapType.valueSerializer,
+                    hasher
             )
-            if (!mapProvider.createWritable(newVersion, newMappedFile).use { newMap ->
-                if (!mapProvider.copyMap(map, newMap)) {
+            if (!mapType.createWritable(newVersion, newMappedFile).use { newMap ->
+                if (!mapType.copyMap(map, newMap)) {
                     newMaxEntries *= 2
                     dir.deleteFile(newMapFilename)
                     false

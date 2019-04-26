@@ -11,25 +11,25 @@ class StraightHashMapEnvTests : FunSpec() {
     init {
         test("env: single writer, multiple readers") {
             withTempDir { tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
 
-                            StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                            StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                     .openReadOnly(tmpDir)
                                     .use { roEnv ->
                                         roEnv.getCurrentVersion() shouldBe 0L
                                     }
 
                             shouldThrow<VersionedDirectoryException> {
-                                StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                         .open(tmpDir)
                             }
                         }
 
-                StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
@@ -39,7 +39,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
         test("env: copy map") {
             withTempDir { tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -48,7 +48,7 @@ class StraightHashMapEnvTests : FunSpec() {
                                 map.put(2, 1.2F) shouldBe PutResult.OK
                                 env.getCurrentVersion() shouldBe 0L
 
-                                StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                         .openReadOnly(tmpDir)
                                         .use { roEnv ->
                                             roEnv.getCurrentVersion() shouldBe 0L
@@ -85,7 +85,7 @@ class StraightHashMapEnvTests : FunSpec() {
         }
 
         test("env: anonymous") {
-            StraightHashMapEnv.Builder(StraightHashMapProvider_Int_Float)
+            StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                     .createAnonymousHeap()
                     .use { env ->
                         env.openMap()
