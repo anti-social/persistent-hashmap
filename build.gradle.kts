@@ -101,6 +101,7 @@ bintray {
     } else {
         System.getenv("BINTRAY_API_KEY")
     }
+    setPublications("mavenJar")
 
     pkg(closureOf<BintrayExtension.PackageConfig> {
         userOrg = "evo"
@@ -110,7 +111,7 @@ bintray {
         setLabels("persistent", "datastructures", "hashmap")
         vcsUrl = "https://github.com/anti-social/persistent-hashmap"
         version(closureOf<BintrayExtension.VersionConfig> {
-            name = version.toString()
+            name = project.version.toString()
             released = Date().toString()
             vcsTag = tag
         })
