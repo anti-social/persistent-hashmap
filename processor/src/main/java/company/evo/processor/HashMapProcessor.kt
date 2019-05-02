@@ -24,6 +24,18 @@ class HashMapProcessor : AbstractProcessor() {
         const val KOTLIN_SOURCE_OPTION_NAME = "kotlin.source"
     }
 
+    class TemplateFile(
+            val dir: Path,
+            val name: String
+    ) {
+        val filePath = dir.resolve(name)
+        val content = filePath.toFile().readText()
+    }
+
+    data class ReplaceRule(val old: String, val new: String) {
+        fun apply(s: String) = s.replace(old, new)
+    }
+
     override fun process(
             annotations: MutableSet<out TypeElement>?, roundEnv: RoundEnvironment
     ): Boolean {
@@ -54,14 +66,16 @@ class HashMapProcessor : AbstractProcessor() {
                     )
                 }
                 val absPackagePath = Paths.get(kotlinSourceDir).resolve(packagePath)
-                val absSrcFilePath = absPackagePath.resolve("${origClassName}.kt")
-                val srcFileContent = absSrcFilePath.toFile().readText()
-                val srcKeyFileContent = getAliasTypePath(
-                        absPackagePath.resolve("keyTypes"), origKeyType
-                ).toFile().readText()
-                val srcValueFileContent = getAliasTypePath(
-                        absPackagePath.resolve("valueTypes"), origValueType
-                ).toFile().readText()
+                val template = TemplateFile(absPackagePath, "${origClassName}.kt")
+
+                val keyTemplate = TemplateFile(
+                        getTypeDir(absPackagePath.resolve("keyTypes"), origKeyType),
+                        getTypeFileName(origKeyType)
+                )
+                val valueTemplate = TemplateFile(
+                        getTypeDir(absPackagePath.resolve("valueTypes"), origValueType),
+                        getTypeFileName(origValueType)
+                )
 
                 val annotation = element.getAnnotation(KeyValueTemplate::class.java)
                 val outputDir = Paths.get(
@@ -70,18 +84,34 @@ class HashMapProcessor : AbstractProcessor() {
                 )
                 annotation.keyTypes.forEach { keyType ->
                     annotation.valueTypes.forEach { valueType ->
+                        val origKeyValueType = "_${origKeyType}_${origValueType}"
+                        val keyValueType = "_${keyType}_${valueType}"
+                        val generatedFileName = "${mainType}${keyValueType}.kt"
                         generateFile(
-                                outputDir, srcFileContent,
-                                mainType, origKeyType, origValueType,
-                                keyType, valueType
+                                outputDir = outputDir,
+                                generatedFileName = generatedFileName,
+                                template = template,
+                                replaceRules = listOf(
+                                        // Imports
+                                        ReplaceRule(".keyTypes.$origKeyType.*", ".keyTypes.$keyType.*"),
+                                        ReplaceRule(".valueTypes.$origValueType.*", ".valueTypes.$valueType.*"),
+                                        // Hash map new
+                                        ReplaceRule(origKeyValueType, keyValueType)
+                                )
                         )
                         generateTypeAliasFile(
-                                outputDir.resolve("keyTypes"),
-                                srcKeyFileContent, origKeyType, keyType
+                                outputDir = getTypeDir(outputDir.resolve("keyTypes"), keyType),
+                                generatedFileName = getTypeFileName(keyType),
+                                template = keyTemplate,
+                                origType = origKeyType,
+                                type = keyType
                         )
                         generateTypeAliasFile(
-                                outputDir.resolve("valueTypes"),
-                                srcValueFileContent, origValueType, valueType
+                                outputDir = getTypeDir(outputDir.resolve("valueTypes"), valueType),
+                                generatedFileName = getTypeFileName(valueType),
+                                template = valueTemplate,
+                                origType = origValueType,
+                                type = valueType
                         )
                     }
                 }
@@ -92,47 +122,46 @@ class HashMapProcessor : AbstractProcessor() {
     }
 
     private fun generateFile(
-            outputDir: Path, templateFileContent: String,
-            mainType: String, origKeyType: String, origValueType: String,
-            keyType: String, valueType: String
+            outputDir: Path,
+            generatedFileName: String,
+            template: TemplateFile,
+            replaceRules: List<ReplaceRule>
     ) {
-        val origKeyValueType = "_${origKeyType}_${origValueType}"
-        val keyValueType = "_${keyType}_${valueType}"
-        val generatedFileName = "${mainType}${keyValueType}.kt"
-        outputDir.resolve(generatedFileName).toFile().apply {
-            parentFile.mkdirs()
-            writeText(
-                    templateFileContent
-                            .replace(
-                                    ".keyTypes.$origKeyType.*",
-                                    ".keyTypes.$keyType.*"
-                            )
-                            .replace(
-                                    ".valueTypes.$origValueType.*",
-                                    ".valueTypes.$valueType.*"
-                            )
-                            .replace(origKeyValueType, keyValueType)
-            )
+        if(template.dir.resolve(generatedFileName).toFile().exists()) {
+            return
         }
-    }
-
-    private fun generateTypeAliasFile(
-            outputDir: Path, templateFileContent: String,
-            origType: String, type: String
-    ) {
-        getAliasTypePath(outputDir, type).toFile().apply {
+        outputDir.resolve(generatedFileName).toFile().apply {
             if (exists()) {
                 return
             }
             parentFile.mkdirs()
-            writeText(templateFileContent.replace(origType, type))
+            val generatedContent = replaceRules.fold(template.content) { generatedContent, rule ->
+                rule.apply(generatedContent)
+            }
+            writeText(generatedContent)
         }
     }
 
-    private fun getAliasTypePath(dir: Path, type: String): Path {
-        return dir
-                .resolve(type)
-                .resolve("${type.toLowerCase()}.kt")
+    private fun generateTypeAliasFile(
+            outputDir: Path, generatedFileName: String, template: TemplateFile,
+            origType: String, type: String
+    ) {
+        if (template.dir.resolve(generatedFileName).toFile().exists()) {
+            return
+        }
+        outputDir.resolve(generatedFileName).toFile().apply {
+            if (exists()) {
+                return
+            }
+            parentFile.mkdirs()
+            writeText(template.content.replace(origType, type))
+        }
+    }
+
+    private fun getTypeFileName(type: String) = "${type.toLowerCase()}.kt"
+
+    private fun getTypeDir(dir: Path, type: String): Path {
+        return dir.resolve(type)
     }
 
     private fun error(message: Any) {
