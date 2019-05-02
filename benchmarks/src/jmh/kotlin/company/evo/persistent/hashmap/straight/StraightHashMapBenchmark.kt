@@ -1,7 +1,8 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.Hash32
 import company.evo.rc.AtomicRefCounted
 
 import org.openjdk.jmh.annotations.Benchmark
@@ -15,17 +16,26 @@ import org.openjdk.jmh.infra.Blackhole
 
 import java.nio.ByteBuffer
 
-open class SimpleHashMapBenchmark {
+open class StraightHashMapBenchmark {
     @State(Scope.Benchmark)
-    open class SimpleHashMapState : BaseState() {
-        var map: SimpleHashMapImpl_Int_Float? = null
+    open class StraightHashMapState : BaseState() {
+        var map: StraightHashMapImpl_Int_Float? = null
 
         @Setup(Level.Trial)
         fun initMap() {
-            val mapInfo = MapInfo.calcFor(entries, 0.5, SimpleHashMap_Int_Float.bucketLayout.size)
+            val mapInfo = MapInfo.calcFor(
+                    entries,
+                    0.5,
+                    StraightHashMapType_Int_Float.bucketLayout.size
+            )
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
-            SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
-            map = SimpleHashMapImpl_Int_Float(
+            mapInfo.initBuffer(
+                    MutableUnsafeBuffer(buffer),
+                    StraightHashMapType_Int_Float.keySerializer,
+                    StraightHashMapType_Int_Float.valueSerializer,
+                    StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+            )
+            map = StraightHashMapImpl_Int_Float(
                     0L,
                     AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {},
                     DefaultStatsCollector()
@@ -51,7 +61,7 @@ open class SimpleHashMapBenchmark {
 
     @Benchmark
     @Threads(1)
-    open fun benchmark_1_reader(state: SimpleHashMapState, blackhole: Blackhole) {
+    open fun benchmark_1_reader(state: StraightHashMapState, blackhole: Blackhole) {
         val map = state.map
         for (ix in BaseState.ixs) {
             blackhole.consume(

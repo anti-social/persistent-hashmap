@@ -1,7 +1,9 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.Hash32
+import company.evo.persistent.hashmap.Hash64
 import company.evo.rc.AtomicRefCounted
 
 import java.nio.ByteBuffer
@@ -11,15 +13,15 @@ import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
 
-class SimpleHashMapTests : StringSpec() {
+class StraightHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
     private val random = Random(seed)
 
     init {
         println("The seed for <$this> test cases is: $seed")
 
-        "test overflow" {
-            createMap(5).use { map ->
+        "int float: test overflow" {
+            createMap_Int_Float(5).use { map ->
 
                 map.maxEntries shouldBe 5
                 map.capacity shouldBe 7
@@ -75,8 +77,8 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "skip tombstone when putting existing key" {
-            createMap(5).use { map ->
+        "int float: skip tombstone when putting existing key" {
+            createMap_Int_Float(5).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -88,8 +90,8 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "no tombstone when removing last record in chain" {
-            createMap(5).use { map ->
+        "int float: no tombstone when removing last record in chain" {
+            createMap_Int_Float(5).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -99,8 +101,8 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "cleanup tombstones when removing last record in chain" {
-            createMap(5).use { map ->
+        "int float: cleanup tombstones when removing last record in chain" {
+            createMap_Int_Float(5).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -123,20 +125,32 @@ class SimpleHashMapTests : StringSpec() {
             }
         }
 
-        "put and remove a little random entries, then get them all".config(invocations = 100) {
-            testRandomPutRemove(12, 17)
+        "int float: put and remove a little random entries, then get them all".config(invocations = 100) {
+            testRandomPutRemove_Int_Float(12, 17)
         }
 
-        "put and remove some random entries, then get them all".config(invocations = 100) {
-            testRandomPutRemove(100, 163)
+        "int float: put and remove some random entries, then get them all".config(invocations = 10) {
+            testRandomPutRemove_Int_Float(100, 163)
         }
 
-        "put and remove a bunch of random entries, then get them all".config(invocations = 1) {
-            testRandomPutRemove(1_000_000, 1395263)
+        "int float: put and remove a bunch of random entries, then get them all".config(invocations = 1) {
+            testRandomPutRemove_Int_Float(1_000_000, 1395263)
+        }
+
+        "long double: put and remove a little random entries, then get them all".config(invocations = 100) {
+            testRandomPutRemove_Long_Double(12, 17)
+        }
+
+        "long double: put and remove some random entries, then get them all".config(invocations = 10) {
+            testRandomPutRemove_Long_Double(100, 163)
+        }
+
+        "long double: put and remove a bunch of random entries, then get them all".config(invocations = 1) {
+            testRandomPutRemove_Int_Float(1_000_000, 1395263)
         }
     }
 
-    private fun testRandomPutRemove(
+    private fun testRandomPutRemove_Int_Float(
             limit: Int, expectedCapacity: Int,
             generateTestCaseCode: Boolean = false
     ) {
@@ -144,9 +158,9 @@ class SimpleHashMapTests : StringSpec() {
 
         if (generateTestCaseCode) {
             println("// Generate data")
-            println("val map = createMap<Int, Float>($limit)")
+            println("val map = createMap_Int_Float<Int, Float>($limit)")
         }
-        createMap(limit).use { map ->
+        createMap_Int_Float(limit).use { map ->
             map.maxEntries shouldBe limit
             map.capacity shouldBe expectedCapacity
 
@@ -221,17 +235,129 @@ class SimpleHashMapTests : StringSpec() {
         }
     }
 
+    private fun testRandomPutRemove_Long_Double(
+            limit: Int, expectedCapacity: Int,
+            generateTestCaseCode: Boolean = false
+    ) {
+        val entries = hashMapOf<Long, Double>()
+        val defaultValue = Double.MIN_VALUE
+
+        if (generateTestCaseCode) {
+            println("// Generate data")
+            println("val map = createMap_Long_Double($limit)")
+        }
+        createMap_Long_Double(limit).use { map ->
+            map.maxEntries shouldBe limit
+            map.capacity shouldBe expectedCapacity
+
+            val keysGen = object : Gen<Long> {
+                val keysStream = random.longs(0, limit / 2L)
+                var collisionCandidate = Long.MIN_VALUE
+                var removeCandidate = Long.MIN_VALUE
+
+                override fun constants(): Iterable<Long> = emptyList()
+
+                override fun random(): Sequence<Long> = sequence {
+                    for (v in keysStream) {
+                        removeCandidate = when {
+                            random.nextInt(3) == 0 -> {
+                                // Generate collisions
+                                val k = random.nextInt(limit * 10).toLong()
+                                val ix = collisionCandidate % expectedCapacity
+                                val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
+                                yield(collidedValue)
+                                collidedValue
+
+                            }
+                            random.nextInt(4) == 0 -> {
+                                yield(-removeCandidate)
+                                collisionCandidate
+                            }
+                            else -> {
+                                yield(v)
+                                v
+                            }
+                        }
+                        if (random.nextInt(10) == 0 || collisionCandidate == Long.MIN_VALUE) {
+                            collisionCandidate = v
+                        }
+                    }
+                }
+            }
+            keysGen.random().take(limit).forEach { k ->
+                if (k < 0) {
+                    val removeKey = -k
+                    val removeRes = entries.remove(removeKey) != null
+                    if (generateTestCaseCode) {
+                        println("map.remove($removeKey) shouldBe $removeRes")
+                    }
+                    map.remove(removeKey) shouldBe removeRes
+                } else {
+                    val v = random.nextDouble()
+                    entries.put(k, v)
+                    if (generateTestCaseCode) {
+                        println("map.put($k, ${v}F) shouldBe PutResult.OK")
+                    }
+                    map.put(k, v) shouldBe PutResult.OK
+                }
+            }
+
+            if (generateTestCaseCode) {
+                println("// Assertions")
+            }
+
+            if (generateTestCaseCode) {
+                println("map.size() shouldBe ${entries.size}")
+            }
+            map.size() shouldBe entries.size
+            (0L..limit).forEach { k ->
+                val expectedValue = entries[k]
+                val v = map.get(k, defaultValue)
+                if (generateTestCaseCode) {
+                    println("map.get($k, ${defaultValue}) shouldBe ${expectedValue ?: defaultValue}F")
+                }
+                v shouldBe (expectedValue ?: defaultValue)
+            }
+        }
+    }
+
     companion object {
-        private fun createMap(
+        private fun createMap_Int_Float(
                 maxEntries: Int, loadFactor: Double = 0.75
-        ): SimpleHashMap_Int_Float {
-            val mapInfo = MapInfo.calcFor(maxEntries, loadFactor, SimpleHashMap_Int_Float.bucketLayout.size)
+        ): StraightHashMap_Int_Float {
+            val mapInfo = MapInfo.calcFor(
+                    maxEntries, loadFactor, StraightHashMapType_Int_Float.bucketLayout.size
+            )
             val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
-            SimpleHashMap_Int_Float.initBuffer(MutableUnsafeBuffer(buffer), mapInfo)
+            mapInfo.initBuffer(
+                    MutableUnsafeBuffer(buffer),
+                    StraightHashMapType_Int_Float.keySerializer,
+                    StraightHashMapType_Int_Float.valueSerializer,
+                    StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+            )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
             ) {}
-            return SimpleHashMapImpl_Int_Float(0L, file)
+            return StraightHashMapImpl_Int_Float(0L, file)
+        }
+
+        private fun createMap_Long_Double(
+                maxEntries: Int, loadFactor: Double = 0.75
+        ): StraightHashMap_Long_Double {
+            val mapInfo = MapInfo.calcFor(
+                    maxEntries, loadFactor, StraightHashMapType_Long_Double.bucketLayout.size
+            )
+            val buffer = ByteBuffer.allocate(mapInfo.bufferSize)
+            mapInfo.initBuffer(
+                    MutableUnsafeBuffer(buffer),
+                    StraightHashMapType_Long_Double.keySerializer,
+                    StraightHashMapType_Long_Double.valueSerializer,
+                    StraightHashMapType_Long_Double.hasherProvider.getHasher(Hash64.serial)
+            )
+            val file = AtomicRefCounted(
+                    MappedFile("<map>", MutableUnsafeBuffer(buffer))
+            ) {}
+            return StraightHashMapType_Long_Double.createWritable(0L, file)
         }
     }
 }

@@ -1,3 +1,3 @@
 rootProject.name = "persistent-hashmap"
 
-include("benchmarks")
+include("processor", "benchmarks")

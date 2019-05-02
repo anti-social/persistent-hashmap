@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import com.devexperts.dxlab.lincheck.LinChecker
 import com.devexperts.dxlab.lincheck.annotations.*
@@ -12,7 +12,7 @@ const val LIN_TEST_MULTIPLIER = 3
 @Param(name = "key", gen = IntGen::class, conf = "1:3")
 //@Param(name = "value", gen = IntGen::class, conf = "1:3")
 class SimpleHashMapLinTest : FunSpec() {
-    private val map = SimpleHashMapEnv_Int_Float.Builder()
+    private val map = StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
             .initialEntries(7)
             .createAnonymousDirect()
     private val table = map.openMap()

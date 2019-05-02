@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.simple
+package company.evo.persistent.hashmap.straight
 
 import java.util.Random
 
