@@ -5,12 +5,13 @@ jdk:
 script:
 - |
   GRADLE_ARGS="--no-daemon --info --stacktrace"
+  ./gradlew assemble $GRADLE_ARGS
   ./gradlew test $GRADLE_ARGS
   ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
 
 after_success:
 - |
-  if [[ $TRAVIS_TAG == "v*" ]]; then
+  if [[ $TRAVIS_TAG == v* ]]; then
     ./gradlew bintrayUpload $GRADLE_ARGS
   fi
 
