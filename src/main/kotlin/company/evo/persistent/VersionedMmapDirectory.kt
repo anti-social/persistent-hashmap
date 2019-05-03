@@ -21,12 +21,7 @@ class VersionedMmapDirectory private constructor(
         val created: Boolean = false
 ) : AbstractVersionedDirectory(versionFile) {
 
-// <<<<<<< HEAD
-
     private var bufferCleaner: (MappedFile<IOBuffer>) -> Unit = {}
-// =======
-//     private var bufferCleaner: (MappedFile) -> Unit = {}
-// >>>>>>> 4d1cb19... Path for MappedFile class
     var useUnmapHack = false
         set(useUnmapHack) {
             if (useUnmapHack && BufferCleaner.BUFFER_CLEANER == null) {
