@@ -1,5 +1,6 @@
 package company.evo.processor
 
+import java.io.FileNotFoundException
 import java.nio.file.Path
 import java.nio.file.Paths
 import javax.annotation.processing.*
@@ -17,7 +18,10 @@ annotation class KeyValueTemplate(
 
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 @SupportedAnnotationTypes("company.evo.processor.KeyValueTemplate")
-@SupportedOptions(HashMapProcessor.KAPT_KOTLIN_GENERATED_OPTION_NAME)
+@SupportedOptions(
+        HashMapProcessor.KAPT_KOTLIN_GENERATED_OPTION_NAME,
+        HashMapProcessor.KOTLIN_SOURCE_OPTION_NAME
+)
 class HashMapProcessor : AbstractProcessor() {
     companion object {
         const val KAPT_KOTLIN_GENERATED_OPTION_NAME = "kapt.kotlin.generated"
@@ -66,7 +70,11 @@ class HashMapProcessor : AbstractProcessor() {
                     )
                 }
                 val absPackagePath = Paths.get(kotlinSourceDir).resolve(packagePath)
-                val template = TemplateFile(absPackagePath, "${origClassName}.kt")
+                val template = try {
+                    TemplateFile(absPackagePath, "${origClassName}.kt")
+                } catch (ex: FileNotFoundException) {
+                    continue
+                }
 
                 val keyTemplate = TemplateFile(
                         getTypeDir(absPackagePath.resolve("keyTypes"), origKeyType),
@@ -138,7 +146,10 @@ class HashMapProcessor : AbstractProcessor() {
             val generatedContent = replaceRules.fold(template.content) { generatedContent, rule ->
                 rule.apply(generatedContent)
             }
-            writeText(generatedContent)
+            writeText(
+                    "// Generated from ${template.name}\n" +
+                    generatedContent
+            )
         }
     }
 
