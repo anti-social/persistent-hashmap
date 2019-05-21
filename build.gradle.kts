@@ -15,8 +15,8 @@ buildscript {
 plugins {
     java
     `maven-publish`
-    kotlin("jvm") version "1.3.21"
-    kotlin("kapt") version "1.3.21"
+    kotlin("jvm") version "1.3.31"
+    kotlin("kapt") version "1.3.31"
     id("org.ajoberstar.grgit") version "3.1.1"
     id("com.jfrog.bintray") version "1.8.4"
 }
