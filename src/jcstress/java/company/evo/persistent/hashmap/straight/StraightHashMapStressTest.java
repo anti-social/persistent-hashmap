@@ -18,11 +18,11 @@ import kotlin.Unit;
 @JCStressTest
 @Outcome(id = "108.0, 108.0, 108.0, 108.0", expect = Expect.ACCEPTABLE, desc = "Ok")
 @State
-public class SimpleHashMapStressTest {
+public class StraightHashMapStressTest {
     private final StraightHashMap_Int_Float map;
     private final StraightHashMapRO_Int_Float mapRO;
 
-    public SimpleHashMapStressTest() {
+    public StraightHashMapStressTest() {
         MapInfo mapInfo = MapInfo.Companion.calcFor(
                 5, 0.75,
                 StraightHashMapType_Int_Float.INSTANCE.getBucketLayout().getSize()
@@ -48,8 +48,7 @@ public class SimpleHashMapStressTest {
         map.put(-6, -106);
         map.put(8, 108);
 
-        ByteBuffer roByteBuffer = byteBuffer.duplicate().clear();
-        IOBuffer roBuffer = new UnsafeBuffer(roByteBuffer);
+        IOBuffer roBuffer = new UnsafeBuffer(byteBuffer);
         mapRO = new StraightHashMapROImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(

@@ -8,7 +8,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.1")
+        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.3")
     }
 }
 
@@ -43,7 +43,7 @@ dependencies {
     compile(kotlin("stdlib-jdk8"))
     compile(kotlin("reflect"))
 
-    implementation(project(":processor"))
+    compileOnly(project(":processor"))
     kapt(project(":processor"))
 
     testImplementation("io.kotlintest", "kotlintest-core", kotlintestVersion)

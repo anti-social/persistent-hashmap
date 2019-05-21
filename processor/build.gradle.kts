@@ -15,3 +15,7 @@ repositories {
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
 }
+
+configure<JavaPluginConvention> {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+}
