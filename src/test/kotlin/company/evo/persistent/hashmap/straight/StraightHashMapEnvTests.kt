@@ -18,6 +18,7 @@ class StraightHashMapEnvTests : FunSpec() {
                             env.getCurrentVersion() shouldBe 0L
 
                             StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                    .useUnmapHack(true)
                                     .openReadOnly(tmpDir)
                                     .use { roEnv ->
                                         roEnv.getCurrentVersion() shouldBe 0L
@@ -30,9 +31,57 @@ class StraightHashMapEnvTests : FunSpec() {
                         }
 
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
+                        }
+            }
+        }
+
+        test("env: new map") {
+            withTempDir {  tmpDir ->
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .useUnmapHack(true)
+                        .open(tmpDir)
+                        .use { env ->
+                            env.openMap().use { map ->
+                                map.put(1, 1.1F) shouldBe PutResult.OK
+                                map.put(2, 1.2F) shouldBe PutResult.OK
+                                env.getCurrentVersion() shouldBe 0L
+
+                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                        .useUnmapHack(true)
+                                        .openReadOnly(tmpDir)
+                                        .use { roEnv ->
+                                            env.newMap(map, map.maxEntries).use { newMap ->
+                                                newMap.put(1, 11F) shouldBe PutResult.OK
+                                                newMap.put(2, 12F) shouldBe PutResult.OK
+                                                env.getCurrentVersion() shouldBe 0L
+
+                                                roEnv.getCurrentVersion() shouldBe 0L
+                                                roEnv.getCurrentMap().use { roMap ->
+                                                    roMap.get(1, 0F) shouldBe 1.1F
+                                                }
+
+                                                env.discard(newMap)
+                                            }
+
+                                            env.newMap(map, map.maxEntries).use { newMap ->
+                                                newMap.put(1, 111F) shouldBe PutResult.OK
+                                                env.getCurrentVersion() shouldBe 0L
+                                                roEnv.getCurrentVersion() shouldBe 0L
+
+                                                env.commit(newMap)
+
+                                                roEnv.getCurrentVersion() shouldBe 1L
+                                                roEnv.getCurrentMap().use { roMap ->
+                                                    roMap.get(1, 0F) shouldBe 111F
+                                                    roMap.get(2, 0F) shouldBe 0F
+                                                }
+                                            }
+                                        }
+                            }
                         }
             }
         }
@@ -49,17 +98,22 @@ class StraightHashMapEnvTests : FunSpec() {
                                 env.getCurrentVersion() shouldBe 0L
 
                                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                        .useUnmapHack(true)
                                         .openReadOnly(tmpDir)
                                         .use { roEnv ->
                                             roEnv.getCurrentVersion() shouldBe 0L
                                             val mapV0 = roEnv.getCurrentMap()
 
                                             env.copyMap(map).use { newMap ->
-                                                env.getCurrentVersion() shouldBe 1L
+                                                env.getCurrentVersion() shouldBe 0L
                                                 newMap.put(3, 1.3F) shouldBe PutResult.OK
+
+                                                roEnv.getCurrentVersion() shouldBe 0L
+                                                env.commit(newMap)
+
+                                                roEnv.getCurrentVersion() shouldBe 1L
                                             }
 
-                                            roEnv.getCurrentVersion() shouldBe 1L
                                             val mapV1 = roEnv.getCurrentMap()
 
                                             mapV0.version shouldBe 0L
@@ -86,6 +140,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
         test("env: anonymous") {
             StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                    .useUnmapHack(true)
                     .createAnonymousHeap()
                     .use { env ->
                         env.openMap()

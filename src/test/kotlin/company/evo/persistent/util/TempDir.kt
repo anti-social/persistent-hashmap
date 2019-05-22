@@ -7,11 +7,7 @@ import org.apache.commons.io.FileUtils.deleteDirectory
 
 class TempDir : AutoCloseable {
     val path: Path = Files.createTempDirectory(null)
-    private val tmpDir = path.toFile()
-
-    init {
-        tmpDir.deleteOnExit()
-    }
+    private val tmpDir = path.toFile().apply { deleteOnExit() }
 
     override fun close() {
         deleteDirectory(tmpDir)

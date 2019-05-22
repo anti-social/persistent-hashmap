@@ -12,6 +12,8 @@ interface IOBuffer {
     fun isDirect(): Boolean
     fun size(): Int
 
+    // fun drop()
+
     fun readBytes(ix: Int, dst: ByteArray)
     fun readBytes(ix: Int, dst: ByteArray, offset: Int, length: Int)
     fun readByte(ix: Int): Byte

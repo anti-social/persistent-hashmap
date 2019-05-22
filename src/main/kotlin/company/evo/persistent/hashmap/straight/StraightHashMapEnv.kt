@@ -222,41 +222,52 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         return mapType.createWritable(ver, mapBuffer)
     }
 
+    fun newMap(oldMap: W, maxEntries: Int): W {
+        val version = oldMap.version + 1
+        val mapInfo = MapInfo.calcFor(
+                maxEntries, loadFactor, mapType.bucketLayout.size
+        )
+        // TODO Write into temporary file then rename
+        val mapFilename = getHashmapFilename(version)
+        val mappedFile = dir.createFile(
+                mapFilename, mapInfo.bufferSize
+        )
+        mapInfo.initBuffer(
+                mappedFile.get().buffer,
+                mapType.keySerializer,
+                mapType.valueSerializer,
+                hasher
+        )
+        return mapType.createWritable(version, mappedFile)
+    }
+
     fun copyMap(map: W): W {
-        val newVersion = map.version + 1
         var newMaxEntries = map.size() * 2
         while (true) {
-            val newMapInfo = MapInfo.calcFor(
-                    newMaxEntries, loadFactor, mapType.bucketLayout.size
-            )
-            // TODO Write into temporary file then rename
-            val newMapFilename = getHashmapFilename(newVersion)
-            val newMappedFile = dir.createFile(
-                    newMapFilename, newMapInfo.bufferSize
-            )
-            val newMappedBuffer = newMappedFile.get().buffer
-            newMapInfo.initBuffer(
-                    newMappedBuffer,
-                    mapType.keySerializer,
-                    mapType.valueSerializer,
-                    hasher
-            )
-            if (!mapType.createWritable(newVersion, newMappedFile).use { newMap ->
-                if (!mapType.copyMap(map, newMap)) {
-                    newMaxEntries *= 2
-                    dir.deleteFile(newMapFilename)
-                    false
-                } else {
-                    true
-                }
-            }) continue
-            break
+            val newMap = newMap(map, newMaxEntries)
+            if (!mapType.copyMap(map, newMap)) {
+                // Too many collisions, double number of maximum entries
+                newMaxEntries *= 2
+                newMap.close()
+                continue
+            } else {
+                return newMap
+            }
         }
-        dir.writeVersion(newVersion)
+    }
 
+    fun commit(map: W) {
+        val curVersion = dir.readVersion()
+        dir.writeVersion(map.version)
+        dir.deleteFile(getHashmapFilename(curVersion))
+    }
+
+    fun discard(map: W) {
+        val curVersion = dir.readVersion()
+        if (map.version == curVersion) {
+            throw IllegalArgumentException("Cannot delete active map")
+        }
         dir.deleteFile(getHashmapFilename(map.version))
-
-        return openMap()
     }
 
     override fun close() {
