@@ -11,7 +11,10 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
+import java.nio.file.CopyOption
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 
 class VersionedMmapDirectory private constructor(
@@ -148,6 +151,10 @@ class VersionedMmapDirectory private constructor(
             throw FileDoesNotExistException(filepath)
         }
         filepath.toFile().delete()
+    }
+
+    override fun rename(source: String, dest: String) {
+        Files.move(path.resolve(source), path.resolve(dest), StandardCopyOption.ATOMIC_MOVE)
     }
 
     private fun ensureWriteLock() {

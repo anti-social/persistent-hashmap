@@ -83,6 +83,7 @@ open class StraightHashMapROImpl_Int_Float
 ) : StraightHashMapRO_Int_Float {
 
     private val buffer = file.get().buffer
+    override val name = file.get().path
 
     init {
         assert(buffer.size() % PAGE_SIZE == 0) {

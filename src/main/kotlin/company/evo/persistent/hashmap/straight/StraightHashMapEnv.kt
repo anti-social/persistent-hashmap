@@ -1,10 +1,12 @@
 package company.evo.persistent.hashmap.straight
 
-import company.evo.io.IOBuffer
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.locks.ReentrantLock
 
+import kotlin.random.Random
+
+import company.evo.io.IOBuffer
 import company.evo.persistent.FileDoesNotExistException
 import company.evo.persistent.MappedFile
 import company.evo.persistent.VersionedDirectory
@@ -216,6 +218,17 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         }
     }
 
+    companion object {
+        private val TEMP_SYMBOLS = ('0'..'9').toList() + ('a'..'z').toList() + ('A'..'Z').toList()
+
+        private fun tempFileName(): String {
+            val randomPart = (1..8).fold("") { s, _ ->
+                s + TEMP_SYMBOLS[Random.nextInt(TEMP_SYMBOLS.size)]
+            }
+            return ".hashmap_$randomPart.tmp"
+        }
+    }
+
     fun openMap(): W {
         val ver = dir.readVersion()
         val mapBuffer = dir.openFileWritable(getHashmapFilename(ver))
@@ -227,8 +240,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         val mapInfo = MapInfo.calcFor(
                 maxEntries, loadFactor, mapType.bucketLayout.size
         )
-        // TODO Write into temporary file then rename
-        val mapFilename = getHashmapFilename(version)
+        val mapFilename = tempFileName()
         val mappedFile = dir.createFile(
                 mapFilename, mapInfo.bufferSize
         )
@@ -258,6 +270,10 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
 
     fun commit(map: W) {
         val curVersion = dir.readVersion()
+        if (map.version <= curVersion) {
+            throw IllegalArgumentException("Map have already been committed")
+        }
+        dir.rename(map.name, getHashmapFilename(map.version))
         dir.writeVersion(map.version)
         dir.deleteFile(getHashmapFilename(curVersion))
     }
@@ -267,7 +283,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         if (map.version == curVersion) {
             throw IllegalArgumentException("Cannot delete active map")
         }
-        dir.deleteFile(getHashmapFilename(map.version))
+        dir.deleteFile(map.name)
     }
 
     override fun close() {

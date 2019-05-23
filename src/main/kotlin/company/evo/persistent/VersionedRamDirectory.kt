@@ -79,6 +79,13 @@ class VersionedRamDirectory private constructor(
                 .also { it.release() }
     }
 
+    override fun rename(source: String, dest: String) {
+        if (buffers.containsKey(dest)) {
+            throw FileAlreadyExistsException(Paths.get(dest))
+        }
+        buffers[dest] = buffers.remove(source) ?: throw FileDoesNotExistException(Paths.get(source))
+    }
+
     override fun close() {
         super.close()
         buffers.forEach { (_, file) -> file.release() }

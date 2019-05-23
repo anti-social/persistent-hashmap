@@ -79,6 +79,12 @@ class StraightHashMapEnvTests : FunSpec() {
                                                     roMap.get(1, 0F) shouldBe 111F
                                                     roMap.get(2, 0F) shouldBe 0F
                                                 }
+
+                                                newMap.put(2, 112F) shouldBe PutResult.OK
+                                                roEnv.getCurrentMap().use { roMap ->
+                                                    roMap.get(1, 0F) shouldBe 111F
+                                                    roMap.get(2, 0F) shouldBe 112F
+                                                }
                                             }
                                         }
                             }

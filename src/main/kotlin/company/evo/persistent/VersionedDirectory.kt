@@ -62,6 +62,11 @@ interface VersionedDirectory : Closeable {
     fun openFileReadOnly(name: String): RefCounted<MappedFile<IOBuffer>>
 
     /**
+     * Atomically renames a file.
+     */
+    fun rename(source: String, dest: String)
+
+    /**
      * Deletes a file with [name].
      */
     fun deleteFile(name: String)

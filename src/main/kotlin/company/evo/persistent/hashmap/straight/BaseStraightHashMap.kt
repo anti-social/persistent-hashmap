@@ -20,6 +20,7 @@ enum class PutResult {
 
 interface StraightHashMap : AutoCloseable {
     val version: Long
+    val name: String
     val maxEntries: Int
     val capacity: Int
     fun size(): Int
