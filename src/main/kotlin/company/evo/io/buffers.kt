@@ -1,18 +1,19 @@
 package company.evo.io
 
-import sun.misc.Unsafe
 import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.security.AccessController
 import java.security.PrivilegedExceptionAction
 
+import sun.misc.Unsafe
+
 interface IOBuffer {
     fun getByteBuffer(): ByteBuffer?
     fun isDirect(): Boolean
     fun size(): Int
 
-    // fun drop()
+    fun drop()
 
     fun readBytes(ix: Int, dst: ByteArray)
     fun readBytes(ix: Int, dst: ByteArray, offset: Int, length: Int)
@@ -106,6 +107,8 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
     protected val byteArray: ByteArray?
     protected val arrayAddress: Long
 
+    private var isDropped = false
+
     init {
         if (buffer.isDirect) {
             byteArray = null
@@ -113,6 +116,12 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
         } else {
             byteArray = getByteArray(buffer)
             arrayAddress = ARRAY_BASE_OFFSET + getArrayAddress(buffer)
+        }
+    }
+
+    protected fun checkNotDropped() {
+        if (isDropped) {
+            throw IllegalStateException("Buffer was dropped")
         }
     }
 
@@ -147,6 +156,17 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
         return buffer.capacity()
     }
 
+    override fun drop() {
+        if (BufferCleaner.BUFFER_CLEANER == null) {
+            return
+        }
+        if (!buffer.isDirect) {
+            return
+        }
+        BufferCleaner.BUFFER_CLEANER.clean(buffer)
+        isDropped = true
+    }
+
     override fun readBytes(ix: Int, dst: ByteArray) {
         checkBounds(buffer, ix, dst.size)
         UNSAFE.copyMemory(
@@ -157,6 +177,7 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
     }
 
     override fun readBytes(ix: Int, dst: ByteArray, offset: Int, length: Int) {
+        checkNotDropped()
         checkLength(length)
         checkBounds(buffer, ix, length)
         checkBounds(dst, offset, length)
@@ -168,62 +189,74 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
     }
 
     override fun readByte(ix: Int): Byte {
+        checkNotDropped()
         checkBounds(buffer, ix, 1)
         return UNSAFE.getByte(byteArray, arrayAddress + ix)
     }
 
     override fun readShort(ix: Int): Short {
+        checkNotDropped()
         checkBounds(buffer, ix, 2)
         return UNSAFE.getShort(byteArray, arrayAddress + ix)
     }
 
     override fun readInt(ix: Int): Int {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         return UNSAFE.getInt(byteArray, arrayAddress + ix)
     }
 
     override fun readLong(ix: Int): Long {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         return UNSAFE.getLong(byteArray, arrayAddress + ix)
     }
 
     override fun readFloat(ix: Int): Float {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         return UNSAFE.getFloat(byteArray, arrayAddress + ix)
     }
 
     override fun readDouble(ix: Int): Double {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         return UNSAFE.getDouble(byteArray, arrayAddress + ix)
     }
 
     override fun readByteVolatile(ix: Int): Byte {
+        checkNotDropped()
         checkBounds(buffer, ix, 1)
         return UNSAFE.getByteVolatile(byteArray, arrayAddress + ix)
 
     }
 
     override fun readShortVolatile(ix: Int): Short {
+        checkNotDropped()
         checkBounds(buffer, ix, 2)
         return UNSAFE.getShortVolatile(byteArray, arrayAddress + ix)
     }
 
     override fun readIntVolatile(ix: Int): Int {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         return UNSAFE.getIntVolatile(byteArray, arrayAddress + ix)
     }
 
     override fun readLongVolatile(ix: Int): Long {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         return UNSAFE.getLongVolatile(byteArray, arrayAddress + ix)
     }
 
     override fun readFloatVolatile(ix: Int): Float {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         return UNSAFE.getFloatVolatile(byteArray, arrayAddress + ix)
     }
 
     override fun readDoubleVolatile(ix: Int): Double {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         return UNSAFE.getDoubleVolatile(byteArray, arrayAddress + ix)
     }
@@ -231,6 +264,7 @@ open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
 
 class MutableUnsafeBuffer(buffer: ByteBuffer) : UnsafeBuffer(buffer), MutableIOBuffer {
     override fun writeBytes(ix: Int, src: ByteArray) {
+        checkNotDropped()
         checkBounds(buffer, ix, src.size)
         UNSAFE.copyMemory(
                 src, ARRAY_BASE_OFFSET,
@@ -240,6 +274,7 @@ class MutableUnsafeBuffer(buffer: ByteBuffer) : UnsafeBuffer(buffer), MutableIOB
     }
 
     override fun writeBytes(ix: Int, src: ByteArray, offset: Int, length: Int) {
+        checkNotDropped()
         checkLength(length)
         checkBounds(buffer, ix, length)
         checkBounds(src, offset, length)
@@ -251,72 +286,86 @@ class MutableUnsafeBuffer(buffer: ByteBuffer) : UnsafeBuffer(buffer), MutableIOB
     }
 
     override fun writeByte(ix: Int, v: Byte) {
+        checkNotDropped()
         checkBounds(buffer, ix, 1)
         UNSAFE.putByte(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeShort(ix: Int, v: Short) {
+        checkNotDropped()
         checkBounds(buffer, ix, 2)
         UNSAFE.putShort(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeInt(ix: Int, v: Int) {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         UNSAFE.putInt(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeLong(ix: Int, v: Long) {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         UNSAFE.putLong(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeFloat(ix: Int, v: Float) {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         UNSAFE.putFloat(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeDouble(ix: Int, v: Double) {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         UNSAFE.putDouble(byteArray, arrayAddress + ix, v)
 
     }
 
     override fun writeByteVolatile(ix: Int, v: Byte) {
+        checkNotDropped()
         checkBounds(buffer, ix, 1)
         UNSAFE.putByteVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeShortVolatile(ix: Int, v: Short) {
+        checkNotDropped()
         checkBounds(buffer, ix, 2)
         UNSAFE.putShortVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeIntVolatile(ix: Int, v: Int) {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         UNSAFE.putIntVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeLongVolatile(ix: Int, v: Long) {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         UNSAFE.putLongVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeFloatVolatile(ix: Int, v: Float) {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         UNSAFE.putFloatVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeDoubleVolatile(ix: Int, v: Double) {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         UNSAFE.putDoubleVolatile(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeIntOrdered(ix: Int, v: Int) {
+        checkNotDropped()
         checkBounds(buffer, ix, 4)
         UNSAFE.putOrderedInt(byteArray, arrayAddress + ix, v)
     }
 
     override fun writeLongOrdered(ix: Int, v: Long) {
+        checkNotDropped()
         checkBounds(buffer, ix, 8)
         UNSAFE.putOrderedLong(byteArray, arrayAddress + ix, v)
     }

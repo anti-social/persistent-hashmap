@@ -1,5 +1,6 @@
 package company.evo.persistent
 
+import company.evo.io.BufferCleaner
 import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
 import company.evo.io.MutableUnsafeBuffer
@@ -27,8 +28,6 @@ class VersionedRamDirectory private constructor(
     private var bufferCleaner: (MutableIOBuffer) -> Unit = {}
     var useUnmapHack = false
         set(useUnmapHack) {
-            if (useUnmapHack)
-                throw IllegalArgumentException("useUnmapHack($useUnmapHack)")
             if (!isDirect) {
                 throw IllegalArgumentException("Only direct buffers support unmappping")
             }
@@ -37,10 +36,7 @@ class VersionedRamDirectory private constructor(
             }
             field = useUnmapHack
             bufferCleaner = { buffer ->
-                val byteBuffer = buffer.getByteBuffer()
-                if (byteBuffer != null) {
-                    BufferCleaner.BUFFER_CLEANER?.clean(byteBuffer)
-                }
+                buffer.drop()
             }
         }
 

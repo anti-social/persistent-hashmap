@@ -1,4 +1,4 @@
-package company.evo.persistent;
+package company.evo.io;
 
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
@@ -20,7 +20,7 @@ import static java.lang.invoke.MethodType.methodType;
  * An implementation was stolen from Lucene:
  * https://github.com/apache/lucene-solr/blob/releases/lucene-solr/8.0.0/lucene/core/src/java/org/apache/lucene/store/MMapDirectory.java#L339
  */
-class BufferCleaner {
+public class BufferCleaner {
     private Class<?> unmappableBufferClass;
     private MethodHandle unmapper;
 

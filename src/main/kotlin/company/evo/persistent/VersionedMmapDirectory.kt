@@ -1,5 +1,6 @@
 package company.evo.persistent
 
+import company.evo.io.BufferCleaner
 import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
 import company.evo.io.MutableUnsafeBuffer
@@ -11,7 +12,6 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
-import java.nio.file.CopyOption
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -32,10 +32,7 @@ class VersionedMmapDirectory private constructor(
             }
             field = useUnmapHack
             bufferCleaner = { file ->
-                val byteBuffer = file.buffer.getByteBuffer()
-                if (byteBuffer != null) {
-                    BufferCleaner.BUFFER_CLEANER?.clean(byteBuffer)
-                }
+                file.buffer.drop()
             }
         }
 
