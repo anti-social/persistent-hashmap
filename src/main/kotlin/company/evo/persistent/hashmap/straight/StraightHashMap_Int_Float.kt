@@ -49,7 +49,7 @@ object StraightHashMapType_Int_Float : StraightHashMapType<K, V, StraightHashMap
     }
 }
 
-interface StraightHashMapRO_Int_Float : StraightHashMap {
+interface StraightHashMapRO_Int_Float : StraightHashMapRO {
     fun contains(key: K): Boolean
     fun get(key: K, defaultValue: V): V
     fun tombstones(): Int
@@ -68,7 +68,7 @@ interface StraightHashMapIterator_Int_Float {
         keyTypes = ["Int", "Long"],
         valueTypes = ["Short", "Int", "Long", "Double", "Float"]
 )
-interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float {
+interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float, StraightHashMap {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
     fun flush()
@@ -105,6 +105,9 @@ open class StraightHashMapROImpl_Int_Float
 
     final override fun size() = readSize()
     final override fun tombstones() = readTombstones()
+
+    final override fun loadBookmark(ix: Int): Long = header.loadBookmark(buffer, ix)
+    final override fun loadAllBookmarks() = header.loadAllBookmarks(buffer)
 
     override fun stats() = statsCollector
 
@@ -336,6 +339,9 @@ class StraightHashMapImpl_Int_Float
         writeValue(bucketOffset, value)
         writeKey(bucketOffset, key)
     }
+
+    final override fun storeBookmark(ix: Int, value: Long) = header.storeBookmark(buffer, ix, value)
+    final override fun storeAllBookmarks(values: LongArray) = header.storeAllBookmarks(buffer, values)
 
     override fun flush() {
         buffer.fsync()

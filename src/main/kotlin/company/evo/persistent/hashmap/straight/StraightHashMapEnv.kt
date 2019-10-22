@@ -30,7 +30,7 @@ abstract class StraightHashMapBaseEnv protected constructor(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
+class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> (
         dir: VersionedDirectory,
         private val mapType: StraightHashMapType<K, V, W, RO>,
         collectStats: Boolean = false
@@ -113,7 +113,7 @@ class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMap> (
     }
 }
 
-class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private constructor(
+class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> private constructor(
         dir: VersionedDirectory,
         val loadFactor: Double,
         private val mapType: StraightHashMapType<K, V, W, RO>,
@@ -121,7 +121,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         collectStats: Boolean = false
 ) : StraightHashMapBaseEnv(dir, collectStats) {
 
-    class Builder<K, V, W: StraightHashMap, RO: StraightHashMap>(private val mapType: StraightHashMapType<K, V, W, RO>) {
+    class Builder<K, V, W: StraightHashMap, RO: StraightHashMapRO>(private val mapType: StraightHashMapType<K, V, W, RO>) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_INITIAL_ENTRIES = 1024
@@ -237,6 +237,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
 
     fun newMap(oldMap: W, maxEntries: Int): W {
         val version = oldMap.version + 1
+        val bookmarks = oldMap.loadAllBookmarks()
         val mapInfo = MapInfo.calcFor(
                 maxEntries, loadFactor, mapType.bucketLayout.size
         )
@@ -250,7 +251,9 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
                 mapType.valueSerializer,
                 hasher
         )
-        return mapType.createWritable(version, mappedFile)
+        return mapType.createWritable(version, mappedFile).apply {
+            storeAllBookmarks(bookmarks)
+        }
     }
 
     fun copyMap(map: W): W {

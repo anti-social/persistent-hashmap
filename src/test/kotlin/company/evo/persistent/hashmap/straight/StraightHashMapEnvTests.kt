@@ -92,6 +92,36 @@ class StraightHashMapEnvTests : FunSpec() {
             }
         }
 
+        test("env: new map should preserve bookmarks") {
+            withTempDir { tmpDir ->
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .useUnmapHack(true)
+                        .open(tmpDir)
+                        .use { env ->
+                            env.openMap().use { map ->
+                                map.storeBookmark(0, 0xCAFE_BABE)
+                                map.loadBookmark(0) shouldBe 0xCAFE_BABE
+
+                                env.newMap(map, map.maxEntries).use { newMap ->
+                                    newMap.loadBookmark(0) shouldBe 0xCAFE_BABE
+                                    newMap.storeBookmark(0, 0xDEAD_BEEF)
+
+                                    env.commit(newMap)
+                                }
+                            }
+                        }
+
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .useUnmapHack(true)
+                        .open(tmpDir)
+                        .use { env ->
+                            env.openMap().use { map ->
+                                map.loadBookmark(0) shouldBe 0xDEAD_BEEF
+                            }
+                        }
+            }
+        }
+
         test("env: copy map") {
             withTempDir { tmpDir ->
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)

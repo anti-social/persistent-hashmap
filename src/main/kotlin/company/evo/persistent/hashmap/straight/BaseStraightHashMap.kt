@@ -18,15 +18,23 @@ enum class PutResult {
     OK, OVERFLOW
 }
 
-interface StraightHashMap : AutoCloseable {
+interface StraightHashMapRO : AutoCloseable {
     val version: Long
     val name: String
     val maxEntries: Int
     val capacity: Int
     fun size(): Int
+
+    fun loadBookmark(ix: Int): Long
+    fun loadAllBookmarks(): LongArray
 }
 
-interface StraightHashMapType<K, V, W: StraightHashMap, RO: StraightHashMap> {
+interface StraightHashMap : StraightHashMapRO {
+    fun storeBookmark(ix: Int, value: Long)
+    fun storeAllBookmarks(values: LongArray)
+}
+
+interface StraightHashMapType<K, V, W: StraightHashMap, RO: StraightHashMapRO> {
     val bucketLayout: BucketLayout
     val keySerializer: Serializer<K>
     val valueSerializer: Serializer<V>
@@ -131,6 +139,8 @@ class Header<K, V>(
         private const val HASHER_SERIAL_SHIFT = 8
         private const val HASHER_SERIAL_MASK = (1L shl HASHER_SERIAL_BITS) - 1
 
+        const val NUM_BOOKMARKS = 32
+
         fun <K, V> load(buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>): Header<K, V> {
             val magic = ByteArray(MAGIC.size)
             buffer.readBytes(0, magic)
@@ -211,6 +221,39 @@ class Header<K, V>(
         buffer.writeLong(SIZE_OFFSET, 0)
         buffer.writeLong(TOMBSTONES_OFFSET, 0)
     }
+
+    fun loadBookmark(buffer: IOBuffer, bookmarkIx: Int): Long {
+        checkNumBookmarks(bookmarkIx)
+        return buffer.readLongVolatile(bookmarkOffset(bookmarkIx))
+    }
+
+    fun storeBookmark(buffer: MutableIOBuffer, bookmarkIx: Int, value: Long) {
+        checkNumBookmarks(bookmarkIx)
+        buffer.writeLongVolatile(bookmarkOffset(bookmarkIx), value)
+    }
+
+    fun loadAllBookmarks(buffer: IOBuffer): LongArray {
+        val bookmarks = LongArray(NUM_BOOKMARKS)
+        (0 until NUM_BOOKMARKS).forEach { ix ->
+            bookmarks[ix] = buffer.readLongVolatile(bookmarkOffset(ix))
+        }
+        return bookmarks
+    }
+
+    fun storeAllBookmarks(buffer: MutableIOBuffer, bookmarks: LongArray) {
+        checkNumBookmarks(bookmarks.size - 1)
+        (0 until NUM_BOOKMARKS).forEach { ix ->
+            buffer.writeLongVolatile(bookmarkOffset(ix), bookmarks[ix])
+        }
+    }
+
+    private fun checkNumBookmarks(bookmarkIx: Int) {
+        require(bookmarkIx in 0 until NUM_BOOKMARKS) {
+            "Only $NUM_BOOKMARKS bookmarks are supported"
+        }
+    }
+
+    private fun bookmarkOffset(bookmarkIx: Int) = PAGE_SIZE - (bookmarkIx + 1) * 8
 
     override fun toString(): String {
         return "${this::class.qualifiedName}<" +
