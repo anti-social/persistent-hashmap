@@ -50,7 +50,9 @@ class VersionedRamDirectory private constructor(
         }
     }
 
-    override fun createFile(name: String, size: Int): RefCounted<MappedFile<MutableIOBuffer>> {
+    override fun createFile(
+            name: String, size: Int, deleteOnExit: Boolean
+    ): RefCounted<MappedFile<MutableIOBuffer>> {
         if (buffers.containsKey(name)) {
             throw FileAlreadyExistsException(Paths.get(name))
         }

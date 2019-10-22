@@ -242,7 +242,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMap> private 
         )
         val mapFilename = tempFileName()
         val mappedFile = dir.createFile(
-                mapFilename, mapInfo.bufferSize
+                mapFilename, mapInfo.bufferSize, deleteOnExit = true
         )
         mapInfo.initBuffer(
                 mappedFile.get().buffer,

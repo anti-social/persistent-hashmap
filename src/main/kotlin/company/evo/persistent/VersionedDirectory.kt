@@ -36,12 +36,13 @@ interface VersionedDirectory : Closeable {
 
     /**
      * Creates a file with [name] and [size] and maps it into a buffer.
+     * If [deleteOnExit] is `true` file will be deleted on virtual machine termination.
      * @return a [MutableIOBuffer] wrapped into [RefCounted].
      *
      * Ownership of the returned value is moved to the caller of the method.
      * So it is a user responsibility to close the file.
      */
-    fun createFile(name: String, size: Int): RefCounted<MappedFile<MutableIOBuffer>>
+    fun createFile(name: String, size: Int, deleteOnExit: Boolean = false): RefCounted<MappedFile<MutableIOBuffer>>
 
     /**
      * Opens an existing file with [name] and maps it into a buffer.
