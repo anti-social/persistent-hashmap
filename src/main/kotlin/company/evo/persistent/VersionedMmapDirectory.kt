@@ -6,8 +6,8 @@ import company.evo.io.MutableIOBuffer
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.rc.AtomicRefCounted
 import company.evo.rc.RefCounted
-import java.io.File
 
+import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
@@ -21,7 +21,7 @@ import java.nio.file.StandardCopyOption
 class VersionedMmapDirectory private constructor(
         val path: Path,
         private val versionFile: MappedFile<MutableIOBuffer>,
-        private val writeLock: FileLock? = null,
+        private val writeLock: VersionLock? = null,
         val created: Boolean = false
 ) : AbstractVersionedDirectory(versionFile) {
 
@@ -36,6 +36,28 @@ class VersionedMmapDirectory private constructor(
                 file.buffer.drop()
             }
         }
+
+    private class VersionLock(versionPath: Path) : AutoCloseable {
+        private val file = RandomAccessFile(versionPath.toString(), "rw")
+        private val lock: FileLock = run {
+            val (lock, ex) = try {
+                file.channel.tryLock() to null
+            } catch (e: OverlappingFileLockException) {
+                null to e
+            }
+            if (lock == null || ex != null) {
+                throw WriteLockException(
+                        "Cannot retain a write lock of the file: $versionPath", ex
+                )
+            }
+            lock
+        }
+
+        override fun close() {
+            lock.close()
+            file.close()
+        }
+    }
 
     companion object {
         private fun getVersionPath(path: Path, versionFilename: String): Path {
@@ -52,21 +74,6 @@ class VersionedMmapDirectory private constructor(
             return file
         }
 
-        private fun acquireLock(versionPath: Path): FileLock {
-            // TODO: Close file and channel when releasing a lock
-            val lockChannel = RandomAccessFile(versionPath.toString(), "rw").channel
-            return try {
-                lockChannel.tryLock()
-                        ?: throw WriteLockException(
-                                "Cannot retain a write lock of the file: $versionPath"
-                        )
-            } catch (e: OverlappingFileLockException) {
-                throw WriteLockException(
-                        "Cannot retain a write lock of the file: $versionPath", e
-                )
-            }
-        }
-
         fun openWritable(path: Path, versionFilename: String): VersionedMmapDirectory {
             val versionPath = getVersionPath(path, versionFilename)
             val (versionFile, created) = if (!versionPath.toFile().exists()) {
@@ -74,7 +81,7 @@ class VersionedMmapDirectory private constructor(
             } else {
                 getVersionFile(versionPath, Mode.OpenRW()) to false
             }
-            val versionLock = acquireLock(versionPath)
+            val versionLock = VersionLock(versionPath)
             return VersionedMmapDirectory(
                     path, versionFile, versionLock, created = created
             )
