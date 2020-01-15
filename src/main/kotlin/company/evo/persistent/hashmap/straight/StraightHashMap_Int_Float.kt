@@ -239,16 +239,16 @@ open class StraightHashMapROImpl_Int_Float
         find(
                key,
                found = { _, bucketOffset, meta, dist ->
-                   var m = meta
+                   var meta1 = meta
                    var value: V
                    while (true) {
                        value = readValue(bucketOffset)
                        val meta2 = readBucketMeta(bucketOffset)
-                       if (m == meta2) {
+                       if (meta1 == meta2) {
                            break
                        }
-                       m = meta2
-                       if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
+                       meta1 = meta2
+                       if (!isBucketOccupied(meta1) || key != readKey(bucketOffset)) {
                            statsCollector.addGet(false, dist)
                            return defaultValue
                        }
