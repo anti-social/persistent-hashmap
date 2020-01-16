@@ -2,34 +2,37 @@ package company.evo.persistent.hashmap
 
 import java.lang.IllegalArgumentException
 
-interface Hasher<T> : (T) -> Int {
+interface Hasher {
     val serial: Long
-    fun hash(v: T): Int
-
-    override fun invoke(p1: T): Int {
-        return hash(p1)
-    }
 }
 
-interface HasherProvider<T> {
+interface Hasher_Int : Hasher {
+    fun hash(v: Int): Int
+}
+
+interface Hasher_Long : Hasher {
+    fun hash(v: Long): Int
+}
+
+interface HasherProvider<out H: Hasher> {
     companion object {
         @Suppress("UNCHECKED_CAST")
-        fun <T> getHashProvider(clazz: Class<T>) = when(clazz) {
+        fun <K, H: Hasher> getHashProvider(clazz: Class<K>): HasherProvider<H> = when(clazz) {
             Int::class.javaPrimitiveType -> HasherProvider_Int
             Long::class.javaPrimitiveType -> HasherProvider_Long
             else -> throw IllegalArgumentException(
                     "Unsupported primitive type: $clazz"
             )
-        } as HasherProvider<T>
+        } as HasherProvider<H>
     }
 
     val defaultHasherSerial: Long
-    fun getHasher(serial: Long): Hasher<T>
+    fun getHasher(serial: Long): Hasher
 }
 
-object HasherProvider_Int : HasherProvider<Int> {
+object HasherProvider_Int : HasherProvider<Hasher_Int> {
     override val defaultHasherSerial = Hash32.serial
-    override fun getHasher(serial: Long) = when (serial) {
+    override fun getHasher(serial: Long): Hasher = when (serial) {
         Hash32.serial -> Hash32
         Prospector32.serial -> Prospector32
         Murmurhash32Mix.serial -> Murmurhash32Mix
@@ -40,7 +43,7 @@ object HasherProvider_Int : HasherProvider<Int> {
     }
 }
 
-object HasherProvider_Long : HasherProvider<Long> {
+object HasherProvider_Long : HasherProvider<Hasher_Long> {
     override val defaultHasherSerial = Hash64.serial
     override fun getHasher(serial: Long) = when (serial) {
         Hash64.serial -> Hash64
@@ -50,7 +53,7 @@ object HasherProvider_Long : HasherProvider<Long> {
     }
 }
 
-object Hash32 : Hasher<Int> {
+object Hash32 : Hasher_Int {
     override val serial = 0L
     override fun hash(v: Int): Int {
         // hash32 function from https://nullprogram.com/blog/2018/07/31/
@@ -62,7 +65,7 @@ object Hash32 : Hasher<Int> {
     }
 }
 
-object Prospector32 : Hasher<Int> {
+object Prospector32 : Hasher_Int {
     override val serial = 1L
     override fun hash(v: Int): Int {
         // prospector32 function from https://nullprogram.com/blog/2018/07/31/
@@ -74,7 +77,7 @@ object Prospector32 : Hasher<Int> {
     }
 }
 
-object Murmurhash32Mix : Hasher<Int> {
+object Murmurhash32Mix : Hasher_Int {
     override val serial = 2L
     override fun hash(v: Int): Int {
         // murmurhash32_mix32 function from https://nullprogram.com/blog/2018/07/31/
@@ -86,7 +89,7 @@ object Murmurhash32Mix : Hasher<Int> {
     }
 }
 
-object Lowbias32 : Hasher<Int> {
+object Lowbias32 : Hasher_Int {
     override val serial = 3L
     override fun hash(v: Int): Int {
         var x = v
@@ -97,7 +100,7 @@ object Lowbias32 : Hasher<Int> {
     }
 }
 
-object Hash64 : Hasher<Long> {
+object Hash64 : Hasher_Long {
     override val serial = 0L
     override fun hash(v: Long): Int {
         // hash64 function from https://nullprogram.com/blog/2018/07/31/

@@ -10,7 +10,7 @@ import company.evo.persistent.hashmap.straight.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
-object StraightHashMapType_Int_Float : StraightHashMapType<K, V, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float> {
+object StraightHashMapType_Int_Float : StraightHashMapType<HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float> {
     override val hasherProvider = HasherProvider_K
     override val keySerializer = Serializer_K()
     override val valueSerializer = Serializer_V()
@@ -93,8 +93,8 @@ open class StraightHashMapROImpl_Int_Float
 
     val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
 
-    val header = Header.load(buffer, K::class.java, V::class.java)
-    protected val hasher = header.hasher
+    val header = Header.load<K, V, Hasher_K>(buffer, K::class.java, V::class.java)
+    protected val hasher: Hasher_K = header.hasher
 
     final override val maxEntries = header.maxEntries
     final override val capacity = header.capacity
@@ -269,7 +269,7 @@ open class StraightHashMapROImpl_Int_Float
             found: (bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int) -> Unit,
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
-        val hash = hasher(key)
+        val hash = hasher.hash(key)
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1

@@ -13,6 +13,7 @@ import company.evo.persistent.VersionedDirectory
 import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.Hasher
+import company.evo.persistent.hashmap.HasherProvider
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
@@ -30,9 +31,9 @@ abstract class StraightHashMapBaseEnv protected constructor(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> (
+class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> (
         dir: VersionedDirectory,
-        private val mapType: StraightHashMapType<K, V, W, RO>,
+        private val mapType: StraightHashMapType<P, H, W, RO>,
         collectStats: Boolean = false
 ) : StraightHashMapBaseEnv(dir, collectStats) {
 
@@ -113,22 +114,24 @@ class StraightHashMapROEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> (
     }
 }
 
-class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> private constructor(
+class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> private constructor(
         dir: VersionedDirectory,
         val loadFactor: Double,
-        private val mapType: StraightHashMapType<K, V, W, RO>,
-        private val hasher: Hasher<K>,
+        private val mapType: StraightHashMapType<P, H, W, RO>,
+        private val hasher: Hasher,
         collectStats: Boolean = false
 ) : StraightHashMapBaseEnv(dir, collectStats) {
 
-    class Builder<K, V, W: StraightHashMap, RO: StraightHashMapRO>(private val mapType: StraightHashMapType<K, V, W, RO>) {
+    class Builder<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO>(
+            private val mapType: StraightHashMapType<P, H, W, RO>
+    ) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
             private const val DEFAULT_INITIAL_ENTRIES = 1024
             private const val DEFAULT_LOAD_FACTOR = 0.75
         }
 
-        var hasher: Hasher<K> = mapType.hasherProvider.run {
+        var hasher: Hasher = mapType.hasherProvider.run {
             getHasher(defaultHasherSerial)
         }
         fun hasher(serial: Long) = apply {
@@ -169,7 +172,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> privat
             this.useUnmapHack = useUnmapHack
         }
 
-        fun open(path: Path): StraightHashMapEnv<K, V, W, RO> {
+        fun open(path: Path): StraightHashMapEnv<P, H, W, RO> {
             val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
             return if (dir.created) {
@@ -179,24 +182,24 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> privat
             }
         }
 
-        fun openReadOnly(path: Path): StraightHashMapROEnv<K, V, W, RO> {
+        fun openReadOnly(path: Path): StraightHashMapROEnv<P, H, W, RO> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
             return StraightHashMapROEnv(dir, mapType, collectStats)
         }
 
-        fun createAnonymousDirect(): StraightHashMapEnv<K, V, W, RO> {
+        fun createAnonymousDirect(): StraightHashMapEnv<P, H, W, RO> {
             val dir = VersionedRamDirectory.createDirect()
             dir.useUnmapHack = useUnmapHack
             return create(dir)
         }
 
-        fun createAnonymousHeap(): StraightHashMapEnv<K, V, W, RO> {
+        fun createAnonymousHeap(): StraightHashMapEnv<P, H, W, RO> {
             val dir = VersionedRamDirectory.createHeap()
             return create(dir)
         }
 
-        private fun create(dir: VersionedDirectory): StraightHashMapEnv<K, V, W, RO> {
+        private fun create(dir: VersionedDirectory): StraightHashMapEnv<P, H, W, RO> {
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
@@ -213,7 +216,7 @@ class StraightHashMapEnv<K, V, W: StraightHashMap, RO: StraightHashMapRO> privat
             return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
         }
 
-        private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<K, V, W, RO> {
+        private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<P, H, W, RO> {
             return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
         }
     }

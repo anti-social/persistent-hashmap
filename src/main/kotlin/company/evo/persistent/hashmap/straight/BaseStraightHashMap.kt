@@ -34,11 +34,11 @@ interface StraightHashMap : StraightHashMapRO {
     fun storeAllBookmarks(values: LongArray)
 }
 
-interface StraightHashMapType<K, V, W: StraightHashMap, RO: StraightHashMapRO> {
+interface StraightHashMapType<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> {
     val bucketLayout: BucketLayout
-    val keySerializer: Serializer<K>
-    val valueSerializer: Serializer<V>
-    val hasherProvider: HasherProvider<K>
+    val keySerializer: Serializer
+    val valueSerializer: Serializer
+    val hasherProvider: HasherProvider<H>
     fun createWritable(
             version: Long,
             file: RefCounted<MappedFile<MutableIOBuffer>>
@@ -100,11 +100,11 @@ data class MapInfo(
         }
     }
 
-    fun <K, V> initBuffer(
+    fun initBuffer(
             buffer: MutableIOBuffer,
-            keySerializer: Serializer<K>,
-            valueSerializer: Serializer<V>,
-            hasher: Hasher<K>
+            keySerializer: Serializer,
+            valueSerializer: Serializer,
+            hasher: Hasher
     ) {
         val header = Header(
                 capacity, maxEntries,
@@ -115,12 +115,12 @@ data class MapInfo(
     }
 }
 
-class Header<K, V>(
+class Header<out H: Hasher>(
         val capacity: Int,
         val maxEntries: Int,
-        val keySerializer: Serializer<K>,
-        val valueSerializer: Serializer<V>,
-        val hasher: Hasher<K>
+        val keySerializer: Serializer,
+        val valueSerializer: Serializer,
+        val hasher: H
 ) {
     companion object {
         val MAGIC = "SPHT\r\n\r\n".toByteArray()
@@ -141,7 +141,7 @@ class Header<K, V>(
 
         const val NUM_BOOKMARKS = 32
 
-        fun <K, V> load(buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>): Header<K, V> {
+        inline fun <K, V, reified H: Hasher> load(buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>): Header<H> {
             val magic = ByteArray(MAGIC.size)
             buffer.readBytes(0, magic)
             if (!magic.contentEquals(MAGIC)) {
@@ -165,8 +165,9 @@ class Header<K, V>(
                             "Mismatch value type serial: expected ${it.serial} but was $serial"
                         }
                     }
-            val hasher = HasherProvider.getHashProvider(keyClazz)
-                    .getHasher(getHasherSerial(flags))
+            val hasher = HasherProvider.getHashProvider<K, H>(keyClazz)
+                    .getHasher(getHasherSerial(flags)) as? H
+                    ?: throw InvalidHashtableException("Mismatched hasher for a key type")
             val capacity = toIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
             val maxEntries = toIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
             return Header(
@@ -187,10 +188,10 @@ class Header<K, V>(
             return v.toInt()
         }
 
-        private fun <K, V> calcFlags(
-                keySerializer: Serializer<K>,
-                valueSerializer: Serializer<V>,
-                hasher: Hasher<K>
+        private fun calcFlags(
+                keySerializer: Serializer,
+                valueSerializer: Serializer,
+                hasher: Hasher
         ): Long {
             return (keySerializer.serial and TYPE_MASK shl KEY_TYPE_SHIFT) or
                     (valueSerializer.serial and TYPE_MASK shl VALUE_TYPE_SHIFT) or
