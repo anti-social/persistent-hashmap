@@ -50,8 +50,10 @@ object StraightHashMapType_Int_Float : StraightHashMapType<K, V, StraightHashMap
 }
 
 interface StraightHashMapRO_Int_Float : StraightHashMap {
+    fun calcHash(key: K): Int
     fun contains(key: K): Boolean
     fun get(key: K, defaultValue: V): V
+    fun get(key: K, hash: Int, defaultValue: V): V
     fun tombstones(): Int
 
     fun stats(): StatsCollector
@@ -205,9 +207,11 @@ open class StraightHashMapROImpl_Int_Float
         return rawValue
     }
 
+    override fun calcHash(key: K): Int = hasher(key)
+
     override fun contains(key: K): Boolean {
         find(
-                key,
+                key, calcHash(key),
                 found = { _, bucketOffset, meta, dist ->
                     var m = meta
                     while (true) {
@@ -233,40 +237,43 @@ open class StraightHashMapROImpl_Int_Float
     }
 
     override fun get(key: K, defaultValue: V): V {
+        return get(key, calcHash(key), defaultValue)
+    }
+
+    override fun get(key: K, hash: Int, defaultValue: V): V {
         find(
-               key,
-               found = { _, bucketOffset, meta, dist ->
-                   var m = meta
-                   var value: V
-                   while (true) {
-                       value = readValue(bucketOffset)
-                       val meta2 = readBucketMeta(bucketOffset)
-                       if (m == meta2) {
-                           break
-                       }
-                       m = meta2
-                       if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
-                           statsCollector.addGet(false, dist)
-                           return defaultValue
-                       }
-                   }
-                   statsCollector.addGet(true, dist)
-                   return value
-               },
-               notFound = { _, _, _, _, dist ->
-                   statsCollector.addGet(false, dist)
-                   return defaultValue
-               }
+                key, hash,
+                found = { _, bucketOffset, meta, dist ->
+                    var m = meta
+                    var value: V
+                    while (true) {
+                        value = readValue(bucketOffset)
+                        val meta2 = readBucketMeta(bucketOffset)
+                        if (m == meta2) {
+                            break
+                        }
+                        m = meta2
+                        if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
+                            statsCollector.addGet(false, dist)
+                            return defaultValue
+                        }
+                    }
+                    statsCollector.addGet(true, dist)
+                    return value
+                },
+                notFound = { _, _, _, _, dist ->
+                    statsCollector.addGet(false, dist)
+                    return defaultValue
+                }
         )
         return defaultValue
     }
 
     protected inline fun find(
-            key: K,
+            key: K, hash: Int,
             found: (bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int) -> Unit,
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
-        val hash = hasher(key)
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
@@ -343,7 +350,7 @@ class StraightHashMapImpl_Int_Float
 
     override fun put(key: K, value: V): PutResult {
         find(
-                key,
+                key, calcHash(key),
                 found = { _, bucketOffset, _, _ ->
                     writeValue(bucketOffset, value)
                     return PutResult.OK
@@ -372,7 +379,7 @@ class StraightHashMapImpl_Int_Float
 
     override fun remove(key: K): Boolean {
         find(
-                key,
+                key, calcHash(key),
                 found = { bucketIx, bucketOffset, meta, _ ->
                     val nextBucketIx = nextBucketIx(bucketIx)
                     val nextBucketPageOffset = getPageOffset(nextBucketIx)
