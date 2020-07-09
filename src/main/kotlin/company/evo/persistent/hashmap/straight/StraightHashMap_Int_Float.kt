@@ -4,13 +4,23 @@ import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
 import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.BucketLayout
+import company.evo.persistent.hashmap.HasherProvider_Int
+import company.evo.persistent.hashmap.Hasher_Int
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.straight.keyTypes.Int.*
 import company.evo.persistent.hashmap.straight.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
-object StraightHashMapType_Int_Float : StraightHashMapType<HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float> {
+typealias StraightHashMapEnv_Int_Float = StraightHashMapEnv<
+    HasherProvider_Int, Hasher_Int, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
+>
+
+object StraightHashMapType_Int_Float :
+    StraightHashMapType<
+        HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
+    >
+{
     override val hasherProvider = HasherProvider_K
     override val keySerializer = Serializer_K()
     override val valueSerializer = Serializer_V()
