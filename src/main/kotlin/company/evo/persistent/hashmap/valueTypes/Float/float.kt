@@ -1,4 +1,4 @@
-package company.evo.persistent.hashmap.straight.valueTypes.Float
+package company.evo.persistent.hashmap.valueTypes.Float
 
 import company.evo.persistent.hashmap.Serializer_Float
 

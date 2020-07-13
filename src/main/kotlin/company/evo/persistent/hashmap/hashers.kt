@@ -37,6 +37,7 @@ object HasherProvider_Int : HasherProvider<Hasher_Int> {
         Prospector32.serial -> Prospector32
         Murmurhash32Mix.serial -> Murmurhash32Mix
         Lowbias32.serial -> Lowbias32
+        Dummy32.serial -> Dummy32
         else -> throw IllegalArgumentException(
                 "Unknown serial for int: $serial"
         )
@@ -47,6 +48,7 @@ object HasherProvider_Long : HasherProvider<Hasher_Long> {
     override val defaultHasherSerial = Hash64.serial
     override fun getHasher(serial: Long) = when (serial) {
         Hash64.serial -> Hash64
+        Dummy64.serial -> Dummy64
         else -> throw IllegalArgumentException(
                 "Unknown serial for long: $serial"
         )
@@ -100,6 +102,13 @@ object Lowbias32 : Hasher_Int {
     }
 }
 
+object Dummy32 : Hasher_Int {
+    override val serial = 255L
+    override fun hash(v: Int): Int {
+        return v
+    }
+}
+
 object Hash64 : Hasher_Long {
     override val serial = 0L
     override fun hash(v: Long): Int {
@@ -109,5 +118,12 @@ object Hash64 : Hasher_Long {
         x = (x xor (x ushr 32)) * -0x2917014799a6026d
         x = x xor (x ushr 32)
         return x.toInt()
+    }
+}
+
+object Dummy64 : Hasher_Long {
+    override val serial = 255L
+    override fun hash(v: Long): Int {
+        return v.toInt()
     }
 }

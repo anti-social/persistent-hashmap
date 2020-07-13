@@ -1,5 +1,6 @@
 package company.evo.persistent.hashmap.straight
 
+import company.evo.persistent.hashmap.BaseState
 import gnu.trove.map.hash.TIntFloatHashMap
 
 import org.openjdk.jmh.annotations.Benchmark
@@ -17,14 +18,10 @@ open class TroveHashMapBenchmark {
         var map: TIntFloatHashMap = TIntFloatHashMap()
 
         @Setup(Level.Trial)
-        fun initMap() {
-            map = TIntFloatHashMap(entries, 0.5F, 0, 0.0F)
-
-            val keys = intKeys.asSequence().take(entries)
-            val values = doubleValues.asSequence().map { it.toFloat() }.take(entries)
-            keys.zip(values).forEach { (k, v) ->
-                map.put(k, v)
-            }
+        fun setUpMap() {
+            val map = TIntFloatHashMap(dataSet.numEntries, 0.5F, 0, 0.0F)
+            initMap { k, v -> map.put(k, v) }
+            this.map = map
         }
 
         @TearDown
@@ -39,9 +36,9 @@ open class TroveHashMapBenchmark {
     @Benchmark
     @Threads(1)
     open fun benchmark_1_reader(state: TroveHashMapState, blackhole: Blackhole) {
-        for (ix in BaseState.ixs) {
+        for (k in state.dataSet.lookupKeys) {
             blackhole.consume(
-                    state.map.get(BaseState.intKeys[ix])
+                state.map.get(k)
             )
         }
     }

@@ -1,8 +1,9 @@
-package company.evo.persistent.hashmap.straight
+package company.evo.persistent.hashmap.robinhood
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.BaseState
+import company.evo.persistent.hashmap.Dummy32
 import company.evo.persistent.hashmap.Hash32
 import company.evo.rc.AtomicRefCounted
 
@@ -17,30 +18,31 @@ import org.openjdk.jmh.infra.Blackhole
 
 import java.nio.ByteBuffer
 
-open class StraightHashMapBenchmark {
+open class RobinHoodHashMapBenchmark {
     @State(Scope.Benchmark)
-    open class StraightHashMapState : BaseState() {
-        var map: StraightHashMap_Int_Float? = null
+    open class RobinHoodHashMapState : BaseState() {
+        var map: RobinHoodHashMap_Int_Float? = null
 
         @Setup(Level.Trial)
         fun setUpMap() {
             val mapInfo = MapInfo.calcFor(
                 dataSet.numEntries,
                 0.5,
-                StraightHashMapType_Int_Float.bucketLayout.size
+                RobinHoodHashMapType_Int_Float.bucketLayout.size
             )
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
             mapInfo.initBuffer(
                 MutableUnsafeBuffer(buffer),
-                StraightHashMapType_Int_Float.keySerializer,
-                StraightHashMapType_Int_Float.valueSerializer,
-                StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+                RobinHoodHashMapType_Int_Float.keySerializer,
+                RobinHoodHashMapType_Int_Float.valueSerializer,
+                RobinHoodHashMapType_Int_Float.hasherProvider.getHasher(Dummy32.serial)
             )
-            val map = StraightHashMap_Int_Float(
+            val map = RobinHoodHashMap_Int_Float(
                 0L,
                 AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {}
             )
             initMap { k, v -> map.put(k, v) }
+
             this.map = map
         }
 
@@ -57,7 +59,7 @@ open class StraightHashMapBenchmark {
 
     @Benchmark
     @Threads(1)
-    open fun benchmark_1_reader(state: StraightHashMapState, blackhole: Blackhole) {
+    open fun benchmark_1_reader(state: RobinHoodHashMapState, blackhole: Blackhole) {
         val map = state.map!!
         for (k in state.dataSet.lookupKeys) {
             blackhole.consume(

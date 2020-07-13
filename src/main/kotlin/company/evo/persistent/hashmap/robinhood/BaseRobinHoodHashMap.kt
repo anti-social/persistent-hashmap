@@ -1,35 +1,64 @@
-package company.evo.persistent.hashmap.straight
+package company.evo.persistent.hashmap.robinhood
 
 import company.evo.io.IOBuffer
 import company.evo.io.MutableIOBuffer
+import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.Hasher
 import company.evo.persistent.hashmap.HasherProvider
 import company.evo.persistent.hashmap.PAGE_SIZE
 import company.evo.persistent.hashmap.PRIMES
 import company.evo.persistent.hashmap.Serializer
+import company.evo.rc.RefCounted
+
+typealias FoundBucketFn = (
+    bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int
+) -> Unit
+typealias NotFoundBacketFn = (
+    bucketIx: Int, bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int
+) -> Unit
 
 open class PersistentHashMapException(msg: String, cause: Exception? = null) : Exception(msg, cause)
 class InvalidHashtableException(msg: String) : PersistentHashMapException(msg)
 
+interface RobinHoodHashMapRO : AutoCloseable {
+    val version: Long
+    val name: String
+    val maxEntries: Int
+    val capacity: Int
+    fun size(): Int
+
+    fun loadBookmark(ix: Int): Long
+    fun loadAllBookmarks(): LongArray
+}
+
+interface RobinHoodHashMap : RobinHoodHashMapRO {
+    fun storeBookmark(ix: Int, value: Long)
+    fun storeAllBookmarks(values: LongArray)
+}
+
 data class MapInfo(
-        val maxEntries: Int,
-        val loadFactor: Double,
-        val capacity: Int,
-        val bucketsPerPage: Int,
-        val numDataPages: Int,
-        val bufferSize: Int
+    val maxEntries: Int,
+    val loadFactor: Double,
+    val capacity: Int,
+    val bucketsPerPage: Int,
+    val numDataPages: Int,
+    val bufferSize: Int
 ) {
     companion object {
         const val DATA_PAGE_HEADER_SIZE = 16
 
-        const val META_SIZE = 2
+        const val META_SIZE = 4
         const val META_TAG_BITS = 2
-        const val META_TAG_SHIFT = 14
+        const val META_TAG_SHIFT = 30
         const val META_TAG_MASK = ((1 shl META_TAG_BITS) - 1) shl META_TAG_SHIFT
-        const val META_FREE = 0x0000
-        const val META_OCCUPIED = 0x8000
-        const val META_TOMBSTONE = 0x4000
-        const val VER_TAG_BITS = 14
+        const val META_FREE = 0x0000_0000
+        const val META_OCCUPIED = 1 shl (META_TAG_SHIFT + 1)
+        const val META_TOMBSTONE = 1 shl META_TAG_SHIFT
+        const val DIST_TAG_BITS = 14
+        const val DIST_TAG_SHIFT = 16
+        const val DIST_TAG_MASK = ((1 shl DIST_TAG_BITS) - 1) shl DIST_TAG_SHIFT
+        const val VER_TAG_BITS = 16
         const val VER_TAG_MASK = (1 shl VER_TAG_BITS) - 1
 
         fun calcFor(maxEntries: Int, loadFactor: Double, bucketSize: Int): MapInfo {
@@ -37,12 +66,12 @@ data class MapInfo(
             val bucketsPerPage = calcBucketsPerPage(bucketSize)
             val numDataPages = calcDataPages(capacity, bucketsPerPage)
             return MapInfo(
-                    maxEntries = maxEntries,
-                    loadFactor = loadFactor,
-                    capacity = capacity,
-                    bucketsPerPage = bucketsPerPage,
-                    numDataPages = numDataPages,
-                    bufferSize = (1 + numDataPages) * PAGE_SIZE
+                maxEntries = maxEntries,
+                loadFactor = loadFactor,
+                capacity = capacity,
+                bucketsPerPage = bucketsPerPage,
+                numDataPages = numDataPages,
+                bufferSize = (1 + numDataPages) * PAGE_SIZE
             )
         }
 
@@ -61,29 +90,29 @@ data class MapInfo(
     }
 
     fun initBuffer(
-            buffer: MutableIOBuffer,
-            keySerializer: Serializer,
-            valueSerializer: Serializer,
-            hasher: Hasher
+        buffer: MutableIOBuffer,
+        keySerializer: Serializer,
+        valueSerializer: Serializer,
+        hasher: Hasher
     ) {
         val header = Header(
-                capacity, maxEntries,
-                keySerializer, valueSerializer,
-                hasher
+            capacity, maxEntries,
+            keySerializer, valueSerializer,
+            hasher
         )
         header.dump(buffer)
     }
 }
 
 class Header<out H: Hasher>(
-        val capacity: Int,
-        val maxEntries: Int,
-        val keySerializer: Serializer,
-        val valueSerializer: Serializer,
-        val hasher: H
+    val capacity: Int,
+    val maxEntries: Int,
+    val keySerializer: Serializer,
+    val valueSerializer: Serializer,
+    val hasher: H
 ) {
     companion object {
-        val MAGIC = "SPHT\r\n\r\n".toByteArray()
+        val MAGIC = "RHHT\r\n\r\n".toByteArray()
         const val FLAGS_OFFSET = 8
         const val CAPACITY_OFFSET = 16
         const val MAX_ENTRIES_OFFSET = 24
@@ -106,56 +135,56 @@ class Header<out H: Hasher>(
             buffer.readBytes(0, magic)
             if (!magic.contentEquals(MAGIC)) {
                 throw InvalidHashtableException(
-                        "Expected ${MAGIC.contentToString()} magic number " +
-                                "but was: ${magic.contentToString()}"
+                    "Expected ${MAGIC.contentToString()} magic number " +
+                        "but was: ${magic.contentToString()}"
                 )
             }
             val flags = buffer.readLong(FLAGS_OFFSET)
             val keySerializer = Serializer.getForClass(keyClazz)
-                    .also {
-                        val serial = getKeySerial(flags)
-                        assert(serial == it.serial) {
-                            "Mismatch key type serial: expected ${it.serial} but was $serial"
-                        }
+                .also {
+                    val serial = getKeySerial(flags)
+                    assert(serial == it.serial) {
+                        "Mismatch key type serial: expected ${it.serial} but was $serial"
                     }
+                }
             val valueSerializer = Serializer.getForClass(valueClazz)
-                    .also {
-                        val serial = getValueSerial(flags)
-                        assert(serial == it.serial) {
-                            "Mismatch value type serial: expected ${it.serial} but was $serial"
-                        }
+                .also {
+                    val serial = getValueSerial(flags)
+                    assert(serial == it.serial) {
+                        "Mismatch value type serial: expected ${it.serial} but was $serial"
                     }
+                }
             val hasher = HasherProvider.getHashProvider<K, H>(keyClazz)
-                    .getHasher(getHasherSerial(flags)) as? H
-                    ?: throw InvalidHashtableException("Mismatched hasher for a key type")
+                .getHasher(getHasherSerial(flags)) as? H
+                ?: throw InvalidHashtableException("Mismatched hasher for a key type")
             val capacity = toIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
             val maxEntries = toIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
             return Header(
-                    capacity = capacity,
-                    maxEntries = maxEntries,
-                    keySerializer = keySerializer,
-                    valueSerializer = valueSerializer,
-                    hasher = hasher
+                capacity = capacity,
+                maxEntries = maxEntries,
+                keySerializer = keySerializer,
+                valueSerializer = valueSerializer,
+                hasher = hasher
             )
         }
 
         fun toIntOrFail(v: Long, property: String): Int {
             if (v > Int.MAX_VALUE) {
                 throw InvalidHashtableException(
-                        "Currently maximum supported $property is: ${Int.MAX_VALUE}, but was: $v"
+                    "Currently maximum supported $property is: ${Int.MAX_VALUE}, but was: $v"
                 )
             }
             return v.toInt()
         }
 
         private fun calcFlags(
-                keySerializer: Serializer,
-                valueSerializer: Serializer,
-                hasher: Hasher
+            keySerializer: Serializer,
+            valueSerializer: Serializer,
+            hasher: Hasher
         ): Long {
             return (keySerializer.serial and TYPE_MASK shl KEY_TYPE_SHIFT) or
-                    (valueSerializer.serial and TYPE_MASK shl VALUE_TYPE_SHIFT) or
-                    (hasher.serial and HASHER_SERIAL_MASK shl HASHER_SERIAL_SHIFT)
+                (valueSerializer.serial and TYPE_MASK shl VALUE_TYPE_SHIFT) or
+                (hasher.serial and HASHER_SERIAL_MASK shl HASHER_SERIAL_SHIFT)
         }
 
         fun getKeySerial(flags: Long): Long {
@@ -174,8 +203,8 @@ class Header<out H: Hasher>(
     fun dump(buffer: MutableIOBuffer) {
         buffer.writeBytes(0, MAGIC)
         buffer.writeLong(
-                FLAGS_OFFSET,
-                calcFlags(keySerializer, valueSerializer, hasher)
+            FLAGS_OFFSET,
+            calcFlags(keySerializer, valueSerializer, hasher)
         )
         buffer.writeLong(CAPACITY_OFFSET, capacity.toLong())
         buffer.writeLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
@@ -218,8 +247,8 @@ class Header<out H: Hasher>(
 
     override fun toString(): String {
         return "${this::class.qualifiedName}<" +
-                "capacity = $capacity, " +
-                "maxEntries = $maxEntries" +
-                ">"
+            "capacity = $capacity, " +
+            "maxEntries = $maxEntries" +
+            ">"
     }
 }

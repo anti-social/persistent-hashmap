@@ -14,12 +14,14 @@ import company.evo.persistent.VersionedMmapDirectory
 import company.evo.persistent.VersionedRamDirectory
 import company.evo.persistent.hashmap.Hasher
 import company.evo.persistent.hashmap.HasherProvider
+import company.evo.persistent.hashmap.PersistentHashMap
+import company.evo.persistent.hashmap.PersistentHashMapRO
+import company.evo.persistent.hashmap.PersistentHashMapType
 import company.evo.rc.RefCounted
 import company.evo.rc.use
 
 abstract class StraightHashMapBaseEnv protected constructor(
-        protected val dir: VersionedDirectory,
-        val collectStats: Boolean
+    protected val dir: VersionedDirectory
 ) : AutoCloseable
 {
     companion object {
@@ -31,11 +33,10 @@ abstract class StraightHashMapBaseEnv protected constructor(
     fun getCurrentVersion() = dir.readVersion()
 }
 
-class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> (
-        dir: VersionedDirectory,
-        private val mapType: StraightHashMapType<P, H, W, RO>,
-        collectStats: Boolean = false
-) : StraightHashMapBaseEnv(dir, collectStats) {
+class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: PersistentHashMap, RO: PersistentHashMapRO> (
+    dir: VersionedDirectory,
+    private val mapType: PersistentHashMapType<P, H, W, RO>
+) : StraightHashMapBaseEnv(dir) {
 
     private data class VersionedFile(
             val version: Long,
@@ -105,7 +106,7 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
         }
 
         // File will be released when closing a hash map
-        return mapType.createReadOnly(curFile.version, curFile.file, collectStats)
+        return mapType.createReadOnly(curFile.version, curFile.file)
     }
 
     override fun close() {
@@ -114,16 +115,16 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
     }
 }
 
-class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> private constructor(
-        dir: VersionedDirectory,
-        val loadFactor: Double,
-        private val mapType: StraightHashMapType<P, H, W, RO>,
-        private val hasher: Hasher,
-        collectStats: Boolean = false
-) : StraightHashMapBaseEnv(dir, collectStats) {
+class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: PersistentHashMap, RO: PersistentHashMapRO>
+private constructor(
+    dir: VersionedDirectory,
+    val loadFactor: Double,
+    private val mapType: PersistentHashMapType<P, H, W, RO>,
+    private val hasher: Hasher
+) : StraightHashMapBaseEnv(dir) {
 
-    class Builder<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO>(
-            private val mapType: StraightHashMapType<P, H, W, RO>
+    class Builder<P: HasherProvider<H>, H: Hasher, W: PersistentHashMap, RO: PersistentHashMapRO>(
+            private val mapType: PersistentHashMapType<P, H, W, RO>
     ) {
         companion object {
             private const val VERSION_FILENAME = "hashmap.ver"
@@ -162,11 +163,6 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
             this.loadFactor = loadFactor
         }
 
-        var collectStats: Boolean = false
-        fun collectStats(collectStats: Boolean) = apply {
-            this.collectStats = collectStats
-        }
-
         var useUnmapHack: Boolean = false
         fun useUnmapHack(useUnmapHack: Boolean) = apply {
             this.useUnmapHack = useUnmapHack
@@ -185,7 +181,7 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
         fun openReadOnly(path: Path): StraightHashMapROEnv<P, H, W, RO> {
             val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
             dir.useUnmapHack = useUnmapHack
-            return StraightHashMapROEnv(dir, mapType, collectStats)
+            return StraightHashMapROEnv(dir, mapType)
         }
 
         fun createAnonymousDirect(): StraightHashMapEnv<P, H, W, RO> {
@@ -213,11 +209,11 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
                         hasher
                 )
             }
-            return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
+            return StraightHashMapEnv(dir, loadFactor, mapType, hasher)
         }
 
         private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<P, H, W, RO> {
-            return StraightHashMapEnv(dir, loadFactor, mapType, hasher, collectStats)
+            return StraightHashMapEnv(dir, loadFactor, mapType, hasher)
         }
     }
 

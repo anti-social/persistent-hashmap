@@ -7,8 +7,14 @@ import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.HasherProvider_Int
 import company.evo.persistent.hashmap.Hasher_Int
 import company.evo.persistent.hashmap.PAGE_SIZE
-import company.evo.persistent.hashmap.straight.keyTypes.Int.*
-import company.evo.persistent.hashmap.straight.valueTypes.Float.*
+import company.evo.persistent.hashmap.PersistentHashMapIterator_Int_Float
+import company.evo.persistent.hashmap.PersistentHashMapRO_Int_Float
+import company.evo.persistent.hashmap.PersistentHashMapStats
+import company.evo.persistent.hashmap.PersistentHashMapType
+import company.evo.persistent.hashmap.PersistentHashMap_Int_Float
+import company.evo.persistent.hashmap.PutResult
+import company.evo.persistent.hashmap.keyTypes.Int.*
+import company.evo.persistent.hashmap.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
@@ -16,8 +22,12 @@ typealias StraightHashMapEnv_Int_Float = StraightHashMapEnv<
     HasherProvider_Int, Hasher_Int, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
 >
 
+@KeyValueTemplate(
+    keyTypes = ["Int", "Long"],
+    valueTypes = ["Short", "Int", "Long", "Double", "Float"]
+)
 object StraightHashMapType_Int_Float :
-    StraightHashMapType<
+    PersistentHashMapType<
         HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
     >
 {
@@ -30,19 +40,14 @@ object StraightHashMapType_Int_Float :
             version: Long,
             file: RefCounted<MappedFile<MutableIOBuffer>>
     ): StraightHashMap_Int_Float {
-        return StraightHashMapImpl_Int_Float(version, file)
+        return StraightHashMap_Int_Float(version, file)
     }
 
     override fun createReadOnly(
             version: Long,
-            file: RefCounted<MappedFile<IOBuffer>>,
-            collectStats: Boolean
+            file: RefCounted<MappedFile<IOBuffer>>
     ): StraightHashMapRO_Int_Float {
-        return StraightHashMapROImpl_Int_Float(
-                version,
-                file,
-                if (collectStats) DefaultStatsCollector() else DummyStatsCollector()
-        )
+        return StraightHashMapRO_Int_Float(version, file)
     }
 
     override fun copyMap(
@@ -59,38 +64,10 @@ object StraightHashMapType_Int_Float :
     }
 }
 
-interface StraightHashMapRO_Int_Float : StraightHashMapRO {
-    fun contains(key: K): Boolean
-    fun get(key: K, defaultValue: V): V
-    fun tombstones(): Int
-
-    fun stats(): StatsCollector
-    fun dump(dumpContent: Boolean): String
-}
-
-interface StraightHashMapIterator_Int_Float {
-    fun next(): Boolean
-    fun key(): K
-    fun value(): V
-}
-
-@KeyValueTemplate(
-        keyTypes = ["Int", "Long"],
-        valueTypes = ["Short", "Int", "Long", "Double", "Float"]
-)
-interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float, StraightHashMap {
-    fun put(key: K, value: V): PutResult
-    fun remove(key: K): Boolean
-    fun flush()
-    fun iterator(): StraightHashMapIterator_Int_Float
-}
-
-open class StraightHashMapROImpl_Int_Float
-@JvmOverloads constructor(
-        override val version: Long,
-        private val file: RefCounted<MappedFile<IOBuffer>>,
-        private val statsCollector: StatsCollector = DummyStatsCollector()
-) : StraightHashMapRO_Int_Float {
+open class StraightHashMapRO_Int_Float(
+    override val version: Long,
+    private val file: RefCounted<MappedFile<IOBuffer>>
+) : PersistentHashMapRO_Int_Float {
 
     private val buffer = file.get().buffer
     override val name = file.get().path
@@ -101,13 +78,17 @@ open class StraightHashMapROImpl_Int_Float
         }
     }
 
-    val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
+    protected val bucketLayout = StraightHashMapType_Int_Float.bucketLayout
+    protected val bucketSize = bucketLayout.size
+    protected val bucketsPerPage = MapInfo.calcBucketsPerPage(bucketSize)
 
     val header = Header.load<K, V, Hasher_K>(buffer, K::class.java, V::class.java)
     protected val hasher: Hasher_K = header.hasher
 
     final override val maxEntries = header.maxEntries
     final override val capacity = header.capacity
+    protected val maxBucketIx = capacity - 1
+    protected val numDataPages = MapInfo.calcDataPages(capacity, bucketsPerPage)
 
     override fun close() {
         file.release()
@@ -118,8 +99,6 @@ open class StraightHashMapROImpl_Int_Float
 
     final override fun loadBookmark(ix: Int): Long = header.loadBookmark(buffer, ix)
     final override fun loadAllBookmarks() = header.loadAllBookmarks(buffer)
-
-    override fun stats() = statsCollector
 
     override fun toString() = dump(false)
 
@@ -154,11 +133,11 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun getBucketIx(hash: Int, dist: Int): Int {
         val h = (hash + dist) and Int.MAX_VALUE
-        return  h % header.capacity
+        return  h % capacity
     }
 
     protected fun nextBucketIx(bucketIx: Int): Int {
-        if (bucketIx >= header.capacity - 1) {
+        if (bucketIx >= maxBucketIx) {
             return 0
         }
         return bucketIx + 1
@@ -166,7 +145,7 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun prevBucketIx(bucketIx: Int): Int {
         if (bucketIx <= 0) {
-            return header.capacity - 1
+            return capacity - 1
         }
         return bucketIx - 1
     }
@@ -177,7 +156,7 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun getBucketOffset(pageOffset: Int, bucketIx: Int): Int {
         return pageOffset + MapInfo.DATA_PAGE_HEADER_SIZE +
-                (bucketIx % bucketsPerPage) * StraightHashMapType_Int_Float.bucketLayout.size
+                (bucketIx % bucketsPerPage) * bucketSize
     }
 
     protected fun readSize(): Int {
@@ -190,31 +169,31 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun readBucketMeta(bucketOffset: Int): Int {
         return buffer.readShortVolatile(
-                bucketOffset + StraightHashMapType_Int_Float.bucketLayout.metaOffset
+                bucketOffset + bucketLayout.metaOffset
         ).toInt() and 0xFFFF
     }
 
     protected fun readKey(bucketOffset: Int): K {
         return StraightHashMapType_Int_Float.keySerializer.read(
-                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset
+                buffer, bucketOffset + bucketLayout.keyOffset
         )
     }
 
     protected fun readValue(bucketOffset: Int): V {
         return StraightHashMapType_Int_Float.valueSerializer.read(
-                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset
+                buffer, bucketOffset + bucketLayout.valueOffset
         )
     }
 
     private fun readRawKey(bucketOffset: Int): ByteArray {
         val rawKey = ByteArray(StraightHashMapType_Int_Float.keySerializer.size)
-        buffer.readBytes(bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset, rawKey)
+        buffer.readBytes(bucketOffset + bucketLayout.keyOffset, rawKey)
         return rawKey
     }
 
     private fun readRawValue(bucketOffset: Int): ByteArray {
         val rawValue = ByteArray(StraightHashMapType_Int_Float.valueSerializer.size)
-        buffer.readBytes(bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset, rawValue)
+        buffer.readBytes(bucketOffset + bucketLayout.valueOffset, rawValue)
         return rawValue
     }
 
@@ -230,15 +209,12 @@ open class StraightHashMapROImpl_Int_Float
                         }
                         m = meta2
                         if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
-                            statsCollector.addGet(false, dist)
                             return false
                         }
                     }
-                    statsCollector.addGet(true, dist)
                     return true
                 },
                 notFound = { _, _, _, _, dist ->
-                    statsCollector.addGet(false, dist)
                     return false
                 }
         )
@@ -259,15 +235,12 @@ open class StraightHashMapROImpl_Int_Float
                        }
                        meta1 = meta2
                        if (!isBucketOccupied(meta1) || key != readKey(bucketOffset)) {
-                           statsCollector.addGet(false, dist)
                            return defaultValue
                        }
                    }
-                   statsCollector.addGet(true, dist)
                    return value
                },
                notFound = { _, _, _, _, dist ->
-                   statsCollector.addGet(false, dist)
                    return defaultValue
                }
         )
@@ -306,17 +279,49 @@ open class StraightHashMapROImpl_Int_Float
     }
 }
 
-class StraightHashMapImpl_Int_Float
-@JvmOverloads constructor(
-        version: Long,
-        private val file: RefCounted<MappedFile<MutableIOBuffer>>,
-        statsCollector: StatsCollector = DummyStatsCollector()
-) : StraightHashMap_Int_Float, StraightHashMapROImpl_Int_Float(
-        version,
-        file,
-        statsCollector
-) {
+class StraightHashMap_Int_Float(
+    version: Long,
+    file: RefCounted<MappedFile<MutableIOBuffer>>
+) : PersistentHashMap_Int_Float, StraightHashMapRO_Int_Float(version, file) {
+
     private val buffer = file.get().buffer
+
+    override fun stats(): PersistentHashMapStats {
+        var bucketIx = 0
+        var entries = 0
+        var tombstones = 0
+        var maxDist = 0
+        var totalDist = 0L
+        pagesLoop@for (pageIx in 0 until numDataPages) {
+            val pageOffset = PAGE_SIZE * (1 + pageIx)
+            for (ix in 0 until bucketsPerPage) {
+                val bucketOffset = pageOffset + MapInfo.DATA_PAGE_HEADER_SIZE + ix * bucketSize
+                val meta = readBucketMeta(bucketOffset)
+                if (isBucketOccupied(meta)) {
+                    entries++
+                    val key = readKey(bucketOffset)
+                    val zeroDistBucketIx = getBucketIx(hasher.hash(key), 0)
+                    val dist = if (bucketIx >= zeroDistBucketIx) {
+                        bucketIx - zeroDistBucketIx
+                    } else {
+                        capacity - zeroDistBucketIx + bucketIx
+                    }
+                    if (dist > maxDist) {
+                        maxDist = dist
+                    }
+                    totalDist += dist
+                } else if (isBucketTombstoned(meta)) {
+                    tombstones++
+                }
+
+                if (bucketIx == maxBucketIx) {
+                    break@pagesLoop
+                }
+                bucketIx++
+            }
+        }
+        return PersistentHashMapStats(entries, tombstones, maxDist, totalDist.toFloat() / entries)
+    }
 
     protected fun writeSize(size: Int) {
         buffer.writeIntOrdered(Header.SIZE_OFFSET, size)
@@ -328,20 +333,20 @@ class StraightHashMapImpl_Int_Float
 
     protected fun writeBucketMeta(bucketOffset: Int, tag: Int, version: Int) {
         buffer.writeShortVolatile(
-                bucketOffset + StraightHashMapType_Int_Float.bucketLayout.metaOffset,
+                bucketOffset + bucketLayout.metaOffset,
                 (tag or (version and MapInfo.VER_TAG_MASK)).toShort()
         )
     }
 
     protected fun writeKey(bucketOffset: Int, key: K) {
         StraightHashMapType_Int_Float.keySerializer.write(
-                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.keyOffset, key
+                buffer, bucketOffset + bucketLayout.keyOffset, key
         )
     }
 
     protected fun writeValue(bucketOffset: Int, value: V) {
         StraightHashMapType_Int_Float.valueSerializer.write(
-                buffer, bucketOffset + StraightHashMapType_Int_Float.bucketLayout.valueOffset, value
+                buffer, bucketOffset + bucketLayout.valueOffset, value
         )
     }
 
@@ -350,8 +355,8 @@ class StraightHashMapImpl_Int_Float
         writeKey(bucketOffset, key)
     }
 
-    final override fun storeBookmark(ix: Int, value: Long) = header.storeBookmark(buffer, ix, value)
-    final override fun storeAllBookmarks(values: LongArray) = header.storeAllBookmarks(buffer, values)
+    override fun storeBookmark(ix: Int, value: Long) = header.storeBookmark(buffer, ix, value)
+    override fun storeAllBookmarks(values: LongArray) = header.storeAllBookmarks(buffer, values)
 
     override fun flush() {
         buffer.fsync()
@@ -432,11 +437,11 @@ class StraightHashMapImpl_Int_Float
         return cleaned
     }
 
-    override fun iterator(): StraightHashMapIterator_Int_Float {
+    override fun iterator(): PersistentHashMapIterator_Int_Float {
         return Iterator()
     }
 
-    inner class Iterator : StraightHashMapIterator_Int_Float {
+    inner class Iterator : PersistentHashMapIterator_Int_Float {
         private var curBucketIx = -1
         private var curBucketOffset = -1
 
