@@ -7,6 +7,7 @@ import company.evo.persistent.hashmap.BucketLayout
 import company.evo.persistent.hashmap.HasherProvider_Int
 import company.evo.persistent.hashmap.Hasher_Int
 import company.evo.persistent.hashmap.PAGE_SIZE
+import company.evo.persistent.hashmap.PersistentHashMapEnv
 import company.evo.persistent.hashmap.PersistentHashMapIterator_Int_Float
 import company.evo.persistent.hashmap.PersistentHashMapRO_Int_Float
 import company.evo.persistent.hashmap.PersistentHashMapStats
@@ -18,14 +19,10 @@ import company.evo.persistent.hashmap.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
-// typealias RobinHoodHashMapEnv_Int_Float = RobinHoodHashMapEnv<
-//     HasherProvider_Int, Hasher_Int, RobinHoodHashMap_Int_Float, RobinHoodHashMapRO_Int_Float
-// >
+typealias RobinHoodHashMapEnv_Int_Float = PersistentHashMapEnv<
+    HasherProvider_Int, Hasher_Int, RobinHoodHashMap_Int_Float, RobinHoodHashMapRO_Int_Float
+    >
 
-// @KeyValueTemplate(
-//     keyTypes = ["Int", "Long"],
-//     valueTypes = ["Short", "Int", "Long", "Double", "Float"]
-// )
 object RobinHoodHashMapType_Int_Float :
     PersistentHashMapType<
         HasherProvider_K, Hasher_K, RobinHoodHashMap_Int_Float, RobinHoodHashMapRO_Int_Float
@@ -124,9 +121,9 @@ open class RobinHoodHashMapRO_Int_Float(
                 val dist = bucketDistance(meta)
                 val version = bucketVersion(meta)
                 "${bucketIx.toString().padEnd(indexPad)}: " +
-                    "$tag, $dist, $version, " +
-                    "${readRawKey(bucketOffset).joinToString(", ", "[", "]")}, " +
-                    readRawValue(bucketOffset).joinToString(", ", "[", "]")
+                    "$tag $dist $version | " +
+                    "${readKey(bucketOffset)}, " +
+                    "${readValue(bucketOffset)}"
             }
             return "$description\n$content"
         }
@@ -218,7 +215,7 @@ open class RobinHoodHashMapRO_Int_Float(
     override fun contains(key: K): Boolean {
         find(
             key,
-            found = { _, bucketOffset, meta, dist ->
+            found = { _, bucketOffset, meta, _ ->
                 var m = meta
                 while (true) {
                     val meta2 = readBucketMeta(bucketOffset)
@@ -232,7 +229,7 @@ open class RobinHoodHashMapRO_Int_Float(
                 }
                 return true
             },
-            notFound = { _, _, _, _, _, dist ->
+            notFound = { _, _, _, _, _, _ ->
                 return false
             }
         )
@@ -242,7 +239,7 @@ open class RobinHoodHashMapRO_Int_Float(
     override fun get(key: K, defaultValue: V): V {
         find(
             key,
-            found = { _, bucketOffset, meta, dist ->
+            found = { _, bucketOffset, meta, _ ->
                 var meta1 = meta
                 var value: V
                 while (true) {
@@ -258,7 +255,7 @@ open class RobinHoodHashMapRO_Int_Float(
                 }
                 return value
             },
-            notFound = { _, _, _, _, _, dist ->
+            notFound = { _, _, _, _, _, _ ->
                 return defaultValue
             }
         )
@@ -270,7 +267,7 @@ open class RobinHoodHashMapRO_Int_Float(
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
-        while(true) {
+        while (true) {
             dist++
             val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
@@ -281,13 +278,11 @@ open class RobinHoodHashMapRO_Int_Float(
                 notFound(bucketIx, bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
                 break
             }
-            if (
-                isBucketTombstoned(meta) &&
-                bucketDistance(meta) == dist &&
-                tombstoneBucketOffset < 0
-            ) {
-                tombstoneBucketOffset = bucketOffset
-                tombstoneMeta = meta
+            if (isBucketTombstoned(meta)) {
+                if (bucketDistance(meta) == dist && tombstoneBucketOffset < 0) {
+                    tombstoneBucketOffset = bucketOffset
+                    tombstoneMeta = meta
+                }
                 continue
             }
             if (key == readKey(bucketOffset)) {
@@ -298,6 +293,10 @@ open class RobinHoodHashMapRO_Int_Float(
     }
 }
 
+@KeyValueTemplate(
+    keyTypes = ["Int", "Long"],
+    valueTypes = ["Short", "Int", "Long", "Double", "Float"]
+)
 class RobinHoodHashMap_Int_Float(
     version: Long,
     file: RefCounted<MappedFile<MutableIOBuffer>>
@@ -403,8 +402,9 @@ class RobinHoodHashMap_Int_Float(
                     writeBucketMeta(bucketOffset, MapInfo.META_OCCUPIED, dist, bucketVersion(meta) + 1)
                     writeSize(size() + 1)
                 } else {
+                    val tombstoneDist = bucketDistance(tombstoneMeta)
                     writeBucketData(tombstoneOffset, key, value)
-                    writeBucketMeta(tombstoneOffset, MapInfo.META_OCCUPIED, dist, bucketVersion(tombstoneMeta) + 1)
+                    writeBucketMeta(tombstoneOffset, MapInfo.META_OCCUPIED, tombstoneDist, bucketVersion(tombstoneMeta) + 1)
                     writeTombstones(tombstones() - 1)
                     writeSize(size() + 1)
                 }
@@ -465,97 +465,6 @@ class RobinHoodHashMap_Int_Float(
         writeBucketData(dstBucketOffset, key, value)
         writeBucketMeta(dstBucketOffset, tag, dist + 1, version + 1)
     }
-
-    // private inline fun putBucket(
-    //     rootCatalogPage: Page, h: Int, dist: Int,
-    //     copyOnWrite: Boolean, writeBucket: (Int) -> Unit
-    // ): Boolean {
-    //     val bucketIx = getBucketIx(h, dist)
-    //
-    //     // Find first free bucket
-    //     var freeBucketIx = bucketIx
-    //     var freeBucketOffset: Int
-    //     while (true) {
-    //         freeBucketOffset = calculateBucketOffset(rootCatalogPage, freeBucketIx)
-    //         val meta = readBucketMeta(freeBucketOffset)
-    //         if (!isBucketOccupied(meta)) {
-    //             break
-    //         }
-    //         freeBucketIx = nextBucketIx(freeBucketIx)
-    //         // There are no free buckets, hash table is full
-    //         if (freeBucketIx == bucketIx) {
-    //             return false
-    //         }
-    //     }
-    //
-    //     // Shift all buckets between current and free bucket
-    //     if (bucketIx != freeBucketIx) {
-    //         var dstBucketIx = freeBucketIx
-    //         while (true) {
-    //             val dstBucketOffset = if (copyOnWrite) {
-    //                 getNewBucketOffset(dstBucketIx)
-    //             } else {
-    //                 calculateBucketOffset(rootCatalogPage, dstBucketIx)
-    //             }
-    //             if (dstBucketOffset < 0) {
-    //                 return false
-    //             }
-    //             val srcBucketIx = prevBucketIx(dstBucketIx)
-    //             val srcBucketOffset = calculateBucketOffset(rootCatalogPage, srcBucketIx)
-    //             val srcMeta = readBucketMeta(srcBucketOffset)
-    //             val srcDistance = getBucketDistance(srcMeta)
-    //
-    //             copyBucket(srcBucketOffset, dstBucketOffset)
-    //             writeBucketDistance(dstBucketOffset, srcDistance + 1)
-    //
-    //             if (srcBucketIx == bucketIx) {
-    //                 break
-    //             }
-    //
-    //             dstBucketIx = srcBucketIx
-    //         }
-    //     }
-    //
-    //     // Write data into current bucket
-    //     val bucketOffset = if (copyOnWrite) {
-    //         getNewBucketOffset(bucketIx)
-    //     } else {
-    //         calculateBucketOffset(rootCatalogPage, bucketIx)
-    //     }
-    //     if (bucketOffset < 0) {
-    //         return false
-    //     }
-    //     writeBucket(bucketOffset)
-    //
-    //     writeSize(size() + 1)
-    //     return true
-    // }
-
-    // private fun putNoCommit(key: K, value: V, copyOnWrite: Boolean): Boolean {
-    //     val h = keySerializer.hash(key)
-    //     val rootCatalogPage = pageManager.getRootCatalogPage()
-    //     find(rootCatalogPage, h,
-    //         maybeFound = { bucketOffset, _ ->
-    //             if (key == readBucketKey(bucketOffset)) {
-    //                 writeBucketValue(bucketOffset, value)
-    //                 true
-    //             } else {
-    //                 false
-    //             }
-    //         },
-    //         notFound = { _, dist ->
-    //             // TODO Consider to save size into local variable
-    //             if (size() >= maxEntries) {
-    //                 return false
-    //             }
-    //             putBucket(rootCatalogPage, h, dist, copyOnWrite) { bucketOffset ->
-    //                 writeBucketData(bucketOffset, key, value)
-    //                 writeBucketDistance(bucketOffset, dist)
-    //             }
-    //         }
-    //     )
-    //     return true
-    // }
 
     override fun remove(key: K): Boolean {
         find(

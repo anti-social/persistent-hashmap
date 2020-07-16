@@ -2,6 +2,7 @@ package company.evo.persistent.hashmap
 
 import company.evo.persistent.hashmap.keyTypes.Int.*
 import company.evo.persistent.hashmap.valueTypes.Float.*
+import company.evo.processor.KeyValueTemplate
 
 
 interface PersistentHashMapRO_Int_Float : PersistentHashMapRO {
@@ -18,6 +19,10 @@ interface PersistentHashMapIterator_Int_Float {
     fun value(): V
 }
 
+@KeyValueTemplate(
+    keyTypes = ["Int", "Long"],
+    valueTypes = ["Short", "Int", "Long", "Double", "Float"]
+)
 interface PersistentHashMap_Int_Float : PersistentHashMapRO_Int_Float, PersistentHashMap {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean

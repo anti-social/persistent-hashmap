@@ -4,6 +4,7 @@ import com.devexperts.dxlab.lincheck.LinChecker
 import com.devexperts.dxlab.lincheck.annotations.*
 import com.devexperts.dxlab.lincheck.paramgen.IntGen
 import com.devexperts.dxlab.lincheck.strategy.stress.StressOptions
+import company.evo.persistent.hashmap.PersistentHashMapEnv
 
 import io.kotlintest.specs.FunSpec
 
@@ -12,7 +13,7 @@ const val LIN_TEST_MULTIPLIER = 3
 @Param(name = "key", gen = IntGen::class, conf = "1:3")
 //@Param(name = "value", gen = IntGen::class, conf = "1:3")
 class SimpleHashMapLinTest : FunSpec() {
-    private val map = StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+    private val map = PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
             .initialEntries(7)
             .createAnonymousDirect()
     private val table = map.openMap()

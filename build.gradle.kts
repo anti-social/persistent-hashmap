@@ -73,6 +73,7 @@ configure<JcstressPluginExtension> {
 }
 
 kapt {
+    // useBuildCache = false
     arguments {
         arg("kotlin.source", kotlin.sourceSets["main"].kotlin.srcDirs.first())
     }

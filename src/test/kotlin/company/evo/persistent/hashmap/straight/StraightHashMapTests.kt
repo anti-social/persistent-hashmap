@@ -4,6 +4,7 @@ import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.Hash32
 import company.evo.persistent.hashmap.Hash64
+import company.evo.persistent.hashmap.PutResult
 import company.evo.rc.AtomicRefCounted
 
 import java.nio.ByteBuffer
@@ -338,7 +339,7 @@ class StraightHashMapTests : StringSpec() {
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
             ) {}
-            return StraightHashMapImpl_Int_Float(0L, file)
+            return StraightHashMap_Int_Float(0L, file)
         }
 
         private fun createMap_Long_Double(

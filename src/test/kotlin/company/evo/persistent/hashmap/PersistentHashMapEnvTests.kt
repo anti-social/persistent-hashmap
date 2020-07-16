@@ -1,23 +1,24 @@
-package company.evo.persistent.hashmap.straight
+package company.evo.persistent.hashmap
 
 import company.evo.persistent.VersionedDirectoryException
+import company.evo.persistent.hashmap.straight.StraightHashMapType_Int_Float
 import company.evo.persistent.util.withTempDir
 
 import io.kotlintest.shouldBe
 import io.kotlintest.shouldThrow
 import io.kotlintest.specs.FunSpec
 
-class StraightHashMapEnvTests : FunSpec() {
+class PersistentHashMapEnvTests : FunSpec() {
     init {
         test("env: single writer, multiple readers") {
             withTempDir { tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
 
-                            StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                            PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                     .useUnmapHack(true)
                                     .openReadOnly(tmpDir)
                                     .use { roEnv ->
@@ -25,12 +26,12 @@ class StraightHashMapEnvTests : FunSpec() {
                                     }
 
                             shouldThrow<VersionedDirectoryException> {
-                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                         .open(tmpDir)
                             }
                         }
 
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -41,7 +42,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
         test("env: new map") {
             withTempDir {  tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -50,7 +51,7 @@ class StraightHashMapEnvTests : FunSpec() {
                                 map.put(2, 1.2F) shouldBe PutResult.OK
                                 env.getCurrentVersion() shouldBe 0L
 
-                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                         .useUnmapHack(true)
                                         .openReadOnly(tmpDir)
                                         .use { roEnv ->
@@ -94,7 +95,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
         test("env: new map should preserve bookmarks") {
             withTempDir { tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -111,7 +112,7 @@ class StraightHashMapEnvTests : FunSpec() {
                             }
                         }
 
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -124,7 +125,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
         test("env: copy map") {
             withTempDir { tmpDir ->
-                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
                         .open(tmpDir)
                         .use { env ->
@@ -133,7 +134,7 @@ class StraightHashMapEnvTests : FunSpec() {
                                 map.put(2, 1.2F) shouldBe PutResult.OK
                                 env.getCurrentVersion() shouldBe 0L
 
-                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                                         .useUnmapHack(true)
                                         .openReadOnly(tmpDir)
                                         .use { roEnv ->
@@ -175,7 +176,7 @@ class StraightHashMapEnvTests : FunSpec() {
         }
 
         test("env: anonymous") {
-            StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+            PersistentHashMapEnv.Builder(StraightHashMapType_Int_Float)
                     .useUnmapHack(true)
                     .createAnonymousHeap()
                     .use { env ->

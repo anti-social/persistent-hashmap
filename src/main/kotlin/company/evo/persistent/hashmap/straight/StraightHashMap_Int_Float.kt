@@ -13,19 +13,17 @@ import company.evo.persistent.hashmap.PersistentHashMapStats
 import company.evo.persistent.hashmap.PersistentHashMapType
 import company.evo.persistent.hashmap.PersistentHashMap_Int_Float
 import company.evo.persistent.hashmap.PutResult
+import company.evo.persistent.hashmap.PersistentHashMapBaseEnv
+import company.evo.persistent.hashmap.PersistentHashMapEnv
 import company.evo.persistent.hashmap.keyTypes.Int.*
 import company.evo.persistent.hashmap.valueTypes.Float.*
 import company.evo.processor.KeyValueTemplate
 import company.evo.rc.RefCounted
 
-typealias StraightHashMapEnv_Int_Float = StraightHashMapEnv<
+typealias StraightHashMapEnv_Int_Float = PersistentHashMapEnv<
     HasherProvider_Int, Hasher_Int, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
 >
 
-@KeyValueTemplate(
-    keyTypes = ["Int", "Long"],
-    valueTypes = ["Short", "Int", "Long", "Double", "Float"]
-)
 object StraightHashMapType_Int_Float :
     PersistentHashMapType<
         HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
@@ -105,7 +103,7 @@ open class StraightHashMapRO_Int_Float(
     override fun dump(dumpContent: Boolean): String {
         val indexPad = capacity.toString().length
         val description = """Header: $header
-            |Bucket layout: ${StraightHashMapType_Int_Float.bucketLayout}
+            |Bucket layout: $bucketLayout
             |Size: ${size()}
             |Tombstones: ${tombstones()}
         """.trimMargin()
@@ -200,7 +198,7 @@ open class StraightHashMapRO_Int_Float(
     override fun contains(key: K): Boolean {
         find(
                 key,
-                found = { _, bucketOffset, meta, dist ->
+                found = { _, bucketOffset, meta, _ ->
                     var m = meta
                     while (true) {
                         val meta2 = readBucketMeta(bucketOffset)
@@ -214,7 +212,7 @@ open class StraightHashMapRO_Int_Float(
                     }
                     return true
                 },
-                notFound = { _, _, _, _, dist ->
+                notFound = { _, _, _, _, _ ->
                     return false
                 }
         )
@@ -224,7 +222,7 @@ open class StraightHashMapRO_Int_Float(
     override fun get(key: K, defaultValue: V): V {
         find(
                key,
-               found = { _, bucketOffset, meta, dist ->
+               found = { _, bucketOffset, meta, _ ->
                    var meta1 = meta
                    var value: V
                    while (true) {
@@ -240,7 +238,7 @@ open class StraightHashMapRO_Int_Float(
                    }
                    return value
                },
-               notFound = { _, _, _, _, dist ->
+               notFound = { _, _, _, _, _ ->
                    return defaultValue
                }
         )
@@ -267,7 +265,7 @@ open class StraightHashMapRO_Int_Float(
                 tombstoneMeta = meta
                 continue
             }
-            if (isBucketFree(meta) || dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+            if (isBucketFree(meta) || dist > PersistentHashMapBaseEnv.MAX_DISTANCE) {
                 notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
                 break
             }
@@ -279,6 +277,10 @@ open class StraightHashMapRO_Int_Float(
     }
 }
 
+@KeyValueTemplate(
+    keyTypes = ["Int", "Long"],
+    valueTypes = ["Short", "Int", "Long", "Double", "Float"]
+)
 class StraightHashMap_Int_Float(
     version: Long,
     file: RefCounted<MappedFile<MutableIOBuffer>>
@@ -370,7 +372,7 @@ class StraightHashMap_Int_Float(
                     return PutResult.OK
                 },
                 notFound = { bucketOffset, meta, tombstoneOffset, tombstoneMeta, dist ->
-                    if (dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+                    if (dist > PersistentHashMapBaseEnv.MAX_DISTANCE) {
                         return PutResult.OVERFLOW
                     }
                     if (size() >= header.maxEntries) {
