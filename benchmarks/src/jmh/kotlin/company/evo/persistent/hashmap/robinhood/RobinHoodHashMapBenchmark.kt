@@ -12,7 +12,6 @@ import org.openjdk.jmh.annotations.Level
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
-import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
@@ -26,7 +25,7 @@ open class RobinHoodHashMapBenchmark {
         @Setup(Level.Trial)
         fun setUpMap() {
             val mapInfo = MapInfo.calcFor(
-                dataSet.numEntries,
+                dataSet.keys.size,
                 0.5,
                 RobinHoodHashMapType_Int_Float.bucketLayout.size
             )
@@ -35,25 +34,22 @@ open class RobinHoodHashMapBenchmark {
                 MutableUnsafeBuffer(buffer),
                 RobinHoodHashMapType_Int_Float.keySerializer,
                 RobinHoodHashMapType_Int_Float.valueSerializer,
-                RobinHoodHashMapType_Int_Float.hasherProvider.getHasher(Dummy32.serial)
+                RobinHoodHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+                // RobinHoodHashMapType_Int_Float.hasherProvider.getHasher(Dummy32.serial)
             )
             val map = RobinHoodHashMap_Int_Float(
                 0L,
                 AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {}
             )
             initMap { k, v -> map.put(k, v) }
-
-            this.map = map
-        }
-
-        @TearDown
-        fun printStats() {
             println()
             println("======== Map Info =========")
-            println(map?.toString())
+            println(map.toString())
             println("======== Get Stats ========")
-            println(map?.stats())
+            println(map.stats())
             println("===========================")
+
+            this.map = map
         }
     }
 

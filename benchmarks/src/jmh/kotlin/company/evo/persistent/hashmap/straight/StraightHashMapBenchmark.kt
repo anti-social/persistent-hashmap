@@ -25,7 +25,7 @@ open class StraightHashMapBenchmark {
         @Setup(Level.Trial)
         fun setUpMap() {
             val mapInfo = MapInfo.calcFor(
-                dataSet.numEntries,
+                dataSet.keys.size,
                 0.5,
                 StraightHashMapType_Int_Float.bucketLayout.size
             )
@@ -41,17 +41,14 @@ open class StraightHashMapBenchmark {
                 AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {}
             )
             initMap { k, v -> map.put(k, v) }
-            this.map = map
-        }
-
-        @TearDown
-        fun printStats() {
             println()
             println("======== Map Info =========")
-            println(map?.toString())
+            println(map.toString())
             println("======== Get Stats ========")
-            println(map?.stats())
+            println(map.stats())
             println("===========================")
+
+            this.map = map
         }
     }
 

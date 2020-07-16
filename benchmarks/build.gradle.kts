@@ -28,4 +28,5 @@ jmh {
     fork = 1
     iterations = 4
     timeOnIteration = "1s"
+    jvmArgs = listOf("-Dproject.dir=${rootDir}")
 }

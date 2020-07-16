@@ -1,6 +1,5 @@
-package company.evo.persistent.hashmap.straight
+package company.evo.persistent.hashmap
 
-import company.evo.persistent.hashmap.BaseState
 import gnu.trove.map.hash.TIntFloatHashMap
 
 import org.openjdk.jmh.annotations.Benchmark
@@ -8,7 +7,6 @@ import org.openjdk.jmh.annotations.Level
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
-import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
@@ -19,17 +17,14 @@ open class TroveHashMapBenchmark {
 
         @Setup(Level.Trial)
         fun setUpMap() {
-            val map = TIntFloatHashMap(dataSet.numEntries, 0.5F, 0, 0.0F)
+            val map = TIntFloatHashMap(dataSet.keys.size, 0.5F, 0, 0.0F)
             initMap { k, v -> map.put(k, v) }
-            this.map = map
-        }
-
-        @TearDown
-        fun printInfo() {
             println()
             println("======== Map Info =========")
             println("Capacity: ${map.capacity()}")
             println("===========================")
+
+            this.map = map
         }
     }
 
