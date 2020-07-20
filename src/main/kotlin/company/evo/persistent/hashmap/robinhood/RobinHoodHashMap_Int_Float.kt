@@ -240,20 +240,25 @@ open class RobinHoodHashMapRO_Int_Float(
         find(
             key,
             found = { _, bucketOffset, meta, _ ->
-                var meta1 = meta
-                var value: V
-                while (true) {
-                    value = readValue(bucketOffset)
-                    val meta2 = readBucketMeta(bucketOffset)
-                    if (meta1 == meta2) {
-                        break
-                    }
-                    meta1 = meta2
-                    if (!isBucketOccupied(meta1) || key != readKey(bucketOffset)) {
-                        return defaultValue
-                    }
+                val value = readValue(bucketOffset)
+                val meta2 = readBucketMeta(bucketOffset)
+                if (meta == meta2) {
+                    return value
                 }
-                return value
+
+                // Bucket could get tombstoned while we read data
+                // we should proceed further in this case
+                if (isBucketTombstoned(meta2)) {
+                    return@find 0
+                }
+
+                // If bucket became free we can return default value
+                if (isBucketFree(meta2)) {
+                    return defaultValue
+                }
+
+                // If bucket is occupied read it again
+                return@find 1
             },
             notFound = { _, _, _, _, _, _ ->
                 return defaultValue
@@ -286,8 +291,8 @@ open class RobinHoodHashMapRO_Int_Float(
                 continue
             }
             if (key == readKey(bucketOffset)) {
-                found(bucketIx, bucketOffset, meta, dist)
-                break
+                dist -= found(bucketIx, bucketOffset, meta, dist)
+                continue
             }
         }
     }
@@ -393,13 +398,15 @@ class RobinHoodHashMap_Int_Float(
                     return PutResult.OVERFLOW
                 }
                 if (tombstoneOffset < 0) {
+                    var verInc = 1
                     if (!isBucketFree(meta)) {
+                        verInc++
                         if (!prepareBucketPlace(bucketIx)) {
                             return PutResult.OVERFLOW
                         }
                     }
                     writeBucketData(bucketOffset, key, value)
-                    writeBucketMeta(bucketOffset, MapInfo.META_OCCUPIED, dist, bucketVersion(meta) + 1)
+                    writeBucketMeta(bucketOffset, MapInfo.META_OCCUPIED, dist, bucketVersion(meta) + verInc)
                     writeSize(size() + 1)
                 } else {
                     val tombstoneDist = bucketDistance(tombstoneMeta)
@@ -462,8 +469,11 @@ class RobinHoodHashMap_Int_Float(
         val tag = bucketTag(meta)
         val dist = bucketDistance(meta)
         val version = bucketVersion(meta)
+        val dstMeta = readBucketMeta(dstBucketOffset)
+        val dstVersion = bucketVersion(dstMeta)
         writeBucketData(dstBucketOffset, key, value)
-        writeBucketMeta(dstBucketOffset, tag, dist + 1, version + 1)
+        writeBucketMeta(dstBucketOffset, tag, dist + 1, dstVersion + 1)
+        writeBucketMeta(srcBucketOffset, MapInfo.META_TOMBSTONE, dist, version + 1)
     }
 
     override fun remove(key: K): Boolean {

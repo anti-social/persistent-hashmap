@@ -13,7 +13,7 @@ import company.evo.rc.RefCounted
 
 typealias FoundBucketFn = (
     bucketIx: Int, bucketOffset: Int, meta: Int, dist: Int
-) -> Unit
+) -> Int
 typealias NotFoundBacketFn = (
     bucketIx: Int, bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int
 ) -> Unit

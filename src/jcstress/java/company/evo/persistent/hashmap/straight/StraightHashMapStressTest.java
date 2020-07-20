@@ -36,26 +36,24 @@ public class StraightHashMapStressTest {
                 StraightHashMapType_Int_Float.INSTANCE.getHasherProvider()
                         .getHasher(Hash32.INSTANCE.getSerial())
         );
-        map = new StraightHashMapImpl_Int_Float(
+        map = new StraightHashMap_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
                         new MappedFile<>("<map>", buffer),
                         (buf) -> Unit.INSTANCE
-                ),
-                new DummyStatsCollector()
+                )
         );
         assert map.getCapacity() == 7;
         map.put(-6, -106);
         map.put(8, 108);
 
         IOBuffer roBuffer = new UnsafeBuffer(byteBuffer);
-        mapRO = new StraightHashMapROImpl_Int_Float(
+        mapRO = new StraightHashMapRO_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
                         new MappedFile<>("<ro-map>", roBuffer),
                         (buf) -> Unit.INSTANCE
-                ),
-                new DummyStatsCollector()
+                )
         );
     }
 
