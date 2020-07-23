@@ -4,6 +4,10 @@ import java.lang.IllegalArgumentException
 
 interface Hasher {
     val serial: Long
+    fun isSequential(): Boolean = true
+    fun probe(ix: Int, hash: Int, length: Int): Int {
+        return (ix + 1) % length
+    }
 }
 
 interface Hasher_Int : Hasher {
@@ -37,6 +41,7 @@ object HasherProvider_Int : HasherProvider<Hasher_Int> {
         Prospector32.serial -> Prospector32
         Murmurhash32Mix.serial -> Murmurhash32Mix
         Lowbias32.serial -> Lowbias32
+        Knuth32.serial -> Knuth32
         Dummy32.serial -> Dummy32
         else -> throw IllegalArgumentException(
                 "Unknown serial for int: $serial"
@@ -63,7 +68,7 @@ object Hash32 : Hasher_Int {
         x = (x xor (x ushr 16)) * 0x45d9f3b
         x = (x xor (x ushr 16)) * 0x45d9f3b
         x = x xor (x ushr 16)
-        return x
+        return x and Int.MAX_VALUE
     }
 }
 
@@ -75,7 +80,7 @@ object Prospector32 : Hasher_Int {
         x = (x xor (x ushr 15)) * 0x2c1b3c6d
         x = (x xor (x ushr 12)) * 0x297a2d39
         x = x xor (x ushr 15)
-        return x
+        return x and Int.MAX_VALUE
     }
 }
 
@@ -87,7 +92,7 @@ object Murmurhash32Mix : Hasher_Int {
         x = (x xor (x ushr 16)) * -0x7a143595
         x = (x xor (x ushr 13)) * -0x3d4d51cb
         x = x xor (x ushr 16)
-        return x
+        return x and Int.MAX_VALUE
     }
 }
 
@@ -98,14 +103,30 @@ object Lowbias32 : Hasher_Int {
         x = (x xor (x ushr 16)) * 0x7feb352d
         x = (x xor (x ushr 15)) * -0x7b935975
         x = x xor (x ushr 16)
-        return x
+        return x and Int.MAX_VALUE
+    }
+}
+
+object Knuth32 : Hasher_Int {
+    override val serial = 4L
+    override fun isSequential() = false
+    override fun hash(v: Int): Int {
+        return v and Int.MAX_VALUE
+    }
+    override fun probe(ix: Int, hash: Int, length: Int): Int {
+        val probe = 1 + (hash % (length - 2))
+        val nextIx = ix - probe
+        if (nextIx < 0) {
+            return nextIx + length
+        }
+        return nextIx
     }
 }
 
 object Dummy32 : Hasher_Int {
     override val serial = 255L
     override fun hash(v: Int): Int {
-        return v
+        return v and Int.MAX_VALUE
     }
 }
 
@@ -117,13 +138,13 @@ object Hash64 : Hasher_Long {
         x = (x xor (x ushr 32)) * -0x2917014799a6026d
         x = (x xor (x ushr 32)) * -0x2917014799a6026d
         x = x xor (x ushr 32)
-        return x.toInt()
+        return x.toInt() and Int.MAX_VALUE
     }
 }
 
 object Dummy64 : Hasher_Long {
     override val serial = 255L
     override fun hash(v: Long): Int {
-        return v.toInt()
+        return v.toInt() and Int.MAX_VALUE
     }
 }

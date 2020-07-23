@@ -157,6 +157,9 @@ class Header<out H: Hasher>(
             val hasher = HasherProvider.getHashProvider<K, H>(keyClazz)
                 .getHasher(getHasherSerial(flags)) as? H
                 ?: throw InvalidHashtableException("Mismatched hasher for a key type")
+            assert(hasher.isSequential()) {
+                "Hasher $hasher is not sequential"
+            }
             val capacity = toIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
             val maxEntries = toIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
             return Header(

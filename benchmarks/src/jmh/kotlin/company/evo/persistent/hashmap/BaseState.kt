@@ -24,10 +24,10 @@ abstract class BaseState {
     }
 
     @Param(
-        "random:1_000_000",
-        "random:10_000_000",
-        "file:benchmark_data.txt.gz;limit=10_000_000",
-        "file:benchmark_data.txt.gz;limit=20_000_000",
+        // "random:1_000_000",
+        // "random:10_000_000",
+        // "file:benchmark_data.txt.gz;limit=10_000_000",
+        // "file:benchmark_data.txt.gz;limit=20_000_000",
         "file:benchmark_data.txt.gz"
     )
     protected var dataSetSpec: String = ""

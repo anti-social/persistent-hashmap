@@ -4,6 +4,7 @@ import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.BaseState
 import company.evo.persistent.hashmap.Hash32
+import company.evo.persistent.hashmap.Knuth32
 import company.evo.rc.AtomicRefCounted
 
 import org.openjdk.jmh.annotations.Benchmark
@@ -11,7 +12,6 @@ import org.openjdk.jmh.annotations.Level
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
-import org.openjdk.jmh.annotations.TearDown
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
@@ -34,7 +34,8 @@ open class StraightHashMapBenchmark {
                 MutableUnsafeBuffer(buffer),
                 StraightHashMapType_Int_Float.keySerializer,
                 StraightHashMapType_Int_Float.valueSerializer,
-                StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+                StraightHashMapType_Int_Float.hasherProvider.getHasher(Knuth32.serial)
+                // StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
             )
             val map = StraightHashMap_Int_Float(
                 0L,

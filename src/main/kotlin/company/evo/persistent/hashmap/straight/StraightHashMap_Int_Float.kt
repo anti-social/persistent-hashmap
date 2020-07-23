@@ -129,10 +129,11 @@ open class StraightHashMapRO_Int_Float(
 
     protected fun bucketVersion(meta: Int) = meta and MapInfo.VER_TAG_MASK
 
-    protected fun getBucketIx(hash: Int, dist: Int): Int {
-        val h = (hash + dist) and Int.MAX_VALUE
-        return  h % capacity
-    }
+    // protected fun getBucketIx(hash: Int, : Int): Int {
+    //     hasher.probe()
+    //     // val h = (hash + dist) and Int.MAX_VALUE
+    //     // return  h % capacity
+    // }
 
     protected fun nextBucketIx(bucketIx: Int): Int {
         if (bucketIx >= maxBucketIx) {
@@ -251,28 +252,29 @@ open class StraightHashMapRO_Int_Float(
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
         val hash = hasher.hash(key)
+        var bucketIx = hash % capacity
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
         while(true) {
             dist++
-            val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
             if (isBucketTombstoned(meta)) {
                 tombstoneBucketOffset = bucketOffset
                 tombstoneMeta = meta
-                continue
+            } else {
+                if (isBucketFree(meta) || dist > PersistentHashMapBaseEnv.MAX_DISTANCE) {
+                    notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
+                    break
+                }
+                if (key == readKey(bucketOffset)) {
+                    found(bucketIx, bucketOffset, meta, dist)
+                    break
+                }
             }
-            if (isBucketFree(meta) || dist > PersistentHashMapBaseEnv.MAX_DISTANCE) {
-                notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
-                break
-            }
-            if (key == readKey(bucketOffset)) {
-                found(bucketIx, bucketOffset, meta, dist)
-                break
-            }
+            bucketIx = hasher.probe(bucketIx, hash, capacity)
         }
     }
 }
@@ -302,12 +304,7 @@ class StraightHashMap_Int_Float(
                 if (isBucketOccupied(meta)) {
                     entries++
                     val key = readKey(bucketOffset)
-                    val zeroDistBucketIx = getBucketIx(hasher.hash(key), 0)
-                    val dist = if (bucketIx >= zeroDistBucketIx) {
-                        bucketIx - zeroDistBucketIx
-                    } else {
-                        capacity - zeroDistBucketIx + bucketIx
-                    }
+                    val dist = calcBucketDist(key, bucketIx)
                     if (dist > maxDist) {
                         maxDist = dist
                     }
@@ -323,6 +320,17 @@ class StraightHashMap_Int_Float(
             }
         }
         return PersistentHashMapStats(entries, tombstones, maxDist, totalDist.toFloat() / entries)
+    }
+
+    private fun calcBucketDist(key: K, realBucketIx: Int): Int {
+        val hash = hasher.hash(key)
+        var bucketIx = hash % capacity
+        var dist = 0
+        while (bucketIx != realBucketIx) {
+            dist++
+            bucketIx = hasher.probe(bucketIx, hash, capacity)
+        }
+        return dist
     }
 
     protected fun writeSize(size: Int) {
@@ -397,20 +405,22 @@ class StraightHashMap_Int_Float(
         find(
                 key,
                 found = { bucketIx, bucketOffset, meta, _ ->
-                    val nextBucketIx = nextBucketIx(bucketIx)
-                    val nextBucketPageOffset = getPageOffset(nextBucketIx)
-                    val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
-                    val nextMeta = readBucketMeta(nextBucketOffset)
+                    if (hasher.isSequential()) {
+                        val nextBucketIx = nextBucketIx(bucketIx)
+                        val nextBucketPageOffset = getPageOffset(nextBucketIx)
+                        val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
+                        val nextMeta = readBucketMeta(nextBucketOffset)
 
-                    if (isBucketFree(nextMeta)) {
-                        writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() - cleanupTombstones(bucketIx))
-                        writeSize(size() - 1)
-                    } else {
-                        writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() + 1)
-                        writeSize(size() - 1)
+                        if (isBucketFree(nextMeta)) {
+                            writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
+                            writeTombstones(tombstones() - cleanupTombstones(bucketIx))
+                            writeSize(size() - 1)
+                            return true
+                        }
                     }
+                    writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
+                    writeTombstones(tombstones() + 1)
+                    writeSize(size() - 1)
                     return true
                 },
                 notFound = { _, _, _, _, _ ->
