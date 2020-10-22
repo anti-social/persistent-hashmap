@@ -26,7 +26,7 @@ apply {
 }
 
 val grgit: org.ajoberstar.grgit.Grgit by extra
-val tag = grgit.describe(mapOf("match" to listOf("v*"))) ?: "v0.0.0"
+val tag = grgit.describe(mapOf("tags" to true, "match" to listOf("v*"))) ?: "v0.0.0"
 
 group = "company.evo"
 version = tag.trimStart('v')
