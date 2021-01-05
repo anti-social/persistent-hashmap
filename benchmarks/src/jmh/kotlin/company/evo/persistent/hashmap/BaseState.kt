@@ -24,11 +24,11 @@ abstract class BaseState {
     }
 
     @Param(
-        "random:1_000_000"
-        // "random:10_000_000",
-        // "file:benchmark_data.txt.gz;limit=1_000_000",
-        // "file:benchmark_data.txt.gz;limit=10_000_000",
-        // "file:benchmark_data.txt.gz;limit=20_000_000",
+        "random:1_000_000",
+        "random:10_000_000"
+        // "file:benchmark_data.txt.gz;limit=2_000_000"
+        // "file:benchmark_data.txt.gz;limit=10_000_000"
+        // "file:benchmark_data.txt.gz;limit=20_000_000"
         // "file:benchmark_data.txt.gz"
     )
     protected var dataSetSpec: String = ""
@@ -52,14 +52,14 @@ abstract class BaseState {
         val lookupKeys: IntArray = when (lookupMode) {
             LookupMode.RND -> {
                 keys.copyOf()
-                    .also { shuffleKeys(it) }
+                    .also(::shuffleKeys)
                     .copyOfRange(0, LOOKUP_LIMIT)
             }
             LookupMode.SEQ -> {
                 keys.copyOf()
-                    .also { shuffleKeys(it) }
-                    .also { it.sort() }
+                    .also(::shuffleKeys)
                     .copyOfRange(0, LOOKUP_LIMIT)
+                    .also(IntArray::sort)
             }
             LookupMode.MISSING_RND -> {
                 val uniqueKeys = keys.toHashSet()

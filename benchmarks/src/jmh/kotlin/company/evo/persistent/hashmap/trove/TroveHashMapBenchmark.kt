@@ -24,6 +24,7 @@ open class TroveHashMapBenchmark {
             println()
             println("======== Map Info =========")
             println("Capacity: ${map.capacity()}")
+            println("Capacity: ${map.size()}")
             println("===========================")
 
             this.map = map

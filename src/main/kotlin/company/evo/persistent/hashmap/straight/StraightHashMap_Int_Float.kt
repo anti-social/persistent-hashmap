@@ -152,11 +152,6 @@ open class StraightHashMapROImpl_Int_Float
 
     protected fun bucketVersion(meta: Int) = meta and MapInfo.VER_TAG_MASK
 
-    protected fun getBucketIx(hash: Int, dist: Int): Int {
-        val h = (hash + dist) and Int.MAX_VALUE
-        return  h % header.capacity
-    }
-
     protected fun nextBucketIx(bucketIx: Int): Int {
         if (bucketIx >= header.capacity - 1) {
             return 0
@@ -280,28 +275,31 @@ open class StraightHashMapROImpl_Int_Float
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
         val hash = hasher.hash(key)
+        var bucketIx = hash % capacity
+        var probe = 0
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
         while(true) {
             dist++
-            val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
             if (isBucketTombstoned(meta)) {
                 tombstoneBucketOffset = bucketOffset
                 tombstoneMeta = meta
-                continue
+            } else {
+                if (isBucketFree(meta) || dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+                    notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
+                    break
+                }
+                if (key == readKey(bucketOffset)) {
+                    found(bucketIx, bucketOffset, meta, dist)
+                    break
+                }
             }
-            if (isBucketFree(meta) || dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
-                notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
-                break
-            }
-            if (key == readKey(bucketOffset)) {
-                found(bucketIx, bucketOffset, meta, dist)
-                break
-            }
+            probe++
+            bucketIx = hasher.probe(probe, bucketIx, hash, capacity)
         }
     }
 }
@@ -390,20 +388,25 @@ class StraightHashMapImpl_Int_Float
         find(
                 key,
                 found = { bucketIx, bucketOffset, meta, _ ->
-                    val nextBucketIx = nextBucketIx(bucketIx)
-                    val nextBucketPageOffset = getPageOffset(nextBucketIx)
-                    val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
-                    val nextMeta = readBucketMeta(nextBucketOffset)
+                    // For sequential hashers we can mark removed bucket as free
+                    // if next bucket is free
+                    if (hasher.isSequential()) {
+                        val nextBucketIx = nextBucketIx(bucketIx)
+                        val nextBucketPageOffset = getPageOffset(nextBucketIx)
+                        val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
+                        val nextMeta = readBucketMeta(nextBucketOffset)
 
-                    if (isBucketFree(nextMeta)) {
-                        writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() - cleanupTombstones(bucketIx))
-                        writeSize(size() - 1)
-                    } else {
-                        writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() + 1)
-                        writeSize(size() - 1)
+                        if (isBucketFree(nextMeta)) {
+                            // TODO: Also free previous buckets if they are tombstones
+                            writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
+                            writeTombstones(tombstones() - cleanupTombstones(bucketIx))
+                            writeSize(size() - 1)
+                            return true
+                        }
                     }
+                    writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
+                    writeTombstones(tombstones() + 1)
+                    writeSize(size() - 1)
                     return true
                 },
                 notFound = { _, _, _, _, _ ->

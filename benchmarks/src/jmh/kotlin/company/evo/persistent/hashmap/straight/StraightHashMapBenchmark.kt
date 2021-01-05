@@ -3,11 +3,14 @@ package company.evo.persistent.hashmap.straight
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
 import company.evo.persistent.hashmap.BaseState
+import company.evo.persistent.hashmap.Dummy32
 import company.evo.persistent.hashmap.Hash32
+import company.evo.persistent.hashmap.Knuth32
 import company.evo.rc.AtomicRefCounted
 
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
+import org.openjdk.jmh.annotations.Param
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
@@ -21,6 +24,13 @@ open class StraightHashMapBenchmark {
     open class StraightHashMapState : BaseState() {
         var map: StraightHashMap_Int_Float? = null
 
+        @Param(
+            "hash32",
+            "knuth32",
+            "dummy32"
+        )
+        private var hashAlgo: String = ""
+
         @Setup(Level.Trial)
         fun setUpMap() {
             val mapInfo = MapInfo.calcFor(
@@ -29,11 +39,17 @@ open class StraightHashMapBenchmark {
                 StraightHashMapType_Int_Float.bucketLayout.size
             )
             val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
+            val hasher = when (hashAlgo) {
+                "hash32" -> Hash32
+                "dummy32" -> Dummy32
+                "knuth32" -> Knuth32
+                else -> throw IllegalArgumentException("Unknown hash algorithm: $hashAlgo")
+            }
             mapInfo.initBuffer(
                 MutableUnsafeBuffer(buffer),
                 StraightHashMapType_Int_Float.keySerializer,
                 StraightHashMapType_Int_Float.valueSerializer,
-                StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+                StraightHashMapType_Int_Float.hasherProvider.getHasher(hasher.serial)
             )
             val map = StraightHashMapImpl_Int_Float(
                 0L,

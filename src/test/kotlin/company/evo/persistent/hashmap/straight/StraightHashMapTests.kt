@@ -2,8 +2,11 @@ package company.evo.persistent.hashmap.straight
 
 import company.evo.io.MutableUnsafeBuffer
 import company.evo.persistent.MappedFile
+import company.evo.persistent.hashmap.Dummy32
 import company.evo.persistent.hashmap.Hash32
 import company.evo.persistent.hashmap.Hash64
+import company.evo.persistent.hashmap.Hasher_Int
+import company.evo.persistent.hashmap.Knuth32
 import company.evo.rc.AtomicRefCounted
 
 import java.nio.ByteBuffer
@@ -12,6 +15,10 @@ import java.util.Random
 import io.kotlintest.properties.Gen
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
+import io.kotlintest.tables.forAll
+import io.kotlintest.tables.headers
+import io.kotlintest.tables.row
+import io.kotlintest.tables.table
 
 class StraightHashMapTests : StringSpec() {
     private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
@@ -21,7 +28,7 @@ class StraightHashMapTests : StringSpec() {
         println("The seed for <$this> test cases is: $seed")
 
         "int float: test overflow" {
-            createMap_Int_Float(5).use { map ->
+            createMap_Int_Float(5, Hash32).use { map ->
 
                 map.maxEntries shouldBe 5
                 map.capacity shouldBe 7
@@ -78,7 +85,7 @@ class StraightHashMapTests : StringSpec() {
         }
 
         "int float: skip tombstone when putting existing key" {
-            createMap_Int_Float(5).use { map ->
+            createMap_Int_Float(5, Hash32).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -91,7 +98,7 @@ class StraightHashMapTests : StringSpec() {
         }
 
         "int float: no tombstone when removing last record in chain" {
-            createMap_Int_Float(5).use { map ->
+            createMap_Int_Float(5, Hash32).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -102,7 +109,7 @@ class StraightHashMapTests : StringSpec() {
         }
 
         "int float: cleanup tombstones when removing last record in chain" {
-            createMap_Int_Float(5).use { map ->
+            createMap_Int_Float(5, Hash32).use { map ->
                 map.capacity shouldBe 7
 
                 map.put(0, 1.0F)
@@ -154,83 +161,90 @@ class StraightHashMapTests : StringSpec() {
             limit: Int, expectedCapacity: Int,
             generateTestCaseCode: Boolean = false
     ) {
-        val entries = hashMapOf<Int, Float>()
+        forAll(table(
+            headers("hasher"),
+            row(Hash32),
+            row(Knuth32),
+            row(Dummy32)
+        )) { hasher ->
+            val entries = hashMapOf<Int, Float>()
 
-        if (generateTestCaseCode) {
-            println("// Generate data")
-            println("val map = createMap_Int_Float<Int, Float>($limit)")
-        }
-        createMap_Int_Float(limit).use { map ->
-            map.maxEntries shouldBe limit
-            map.capacity shouldBe expectedCapacity
+            if (generateTestCaseCode) {
+                println("// Generate data")
+                println("val map = createMap_Int_Float<Int, Float>($limit)")
+            }
+            createMap_Int_Float(limit, hasher).use { map ->
+                map.maxEntries shouldBe limit
+                map.capacity shouldBe expectedCapacity
 
-            val keysGen = object : Gen<Int> {
-                val keysStream = random.ints(0, limit / 2)
-                var collisionCandidate = Int.MIN_VALUE
-                var removeCandidate = Int.MIN_VALUE
+                val keysGen = object : Gen<Int> {
+                    val keysStream = random.ints(0, limit / 2)
+                    var collisionCandidate = Int.MIN_VALUE
+                    var removeCandidate = Int.MIN_VALUE
 
-                override fun constants(): Iterable<Int> = emptyList()
+                    override fun constants(): Iterable<Int> = emptyList()
 
-                override fun random(): Sequence<Int> = sequence {
-                    for (v in keysStream) {
-                        removeCandidate = when {
-                            random.nextInt(3) == 0 -> {
-                                // Generate collisions
-                                val k = random.nextInt(limit * 10)
-                                val ix = collisionCandidate % expectedCapacity
-                                val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
-                                yield(collidedValue)
-                                collidedValue
+                    override fun random(): Sequence<Int> = sequence {
+                        for (v in keysStream) {
+                            removeCandidate = when {
+                                random.nextInt(3) == 0 -> {
+                                    // Generate collisions
+                                    val k = random.nextInt(limit * 10)
+                                    val ix = collisionCandidate % expectedCapacity
+                                    val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
+                                    yield(collidedValue)
+                                    collidedValue
 
+                                }
+                                random.nextInt(4) == 0 -> {
+                                    yield(-removeCandidate)
+                                    collisionCandidate
+                                }
+                                else -> {
+                                    yield(v)
+                                    v
+                                }
                             }
-                            random.nextInt(4) == 0 -> {
-                                yield(-removeCandidate)
-                                collisionCandidate
+                            if (random.nextInt(10) == 0 || collisionCandidate == Int.MIN_VALUE) {
+                                collisionCandidate = v
                             }
-                            else -> {
-                                yield(v)
-                                v
-                            }
-                        }
-                        if (random.nextInt(10) == 0 || collisionCandidate == Int.MIN_VALUE) {
-                            collisionCandidate = v
                         }
                     }
                 }
-            }
-            keysGen.random().take(limit).forEach { k ->
-                if (k < 0) {
-                    val removeKey = -k
-                    val removeRes = entries.remove(removeKey) != null
-                    if (generateTestCaseCode) {
-                        println("map.remove($removeKey) shouldBe $removeRes")
+                keysGen.random().take(limit).forEach { k ->
+                    if (k < 0) {
+                        val removeKey = -k
+                        val removeRes = entries.remove(removeKey) != null
+                        if (generateTestCaseCode) {
+                            println("map.remove($removeKey) shouldBe $removeRes")
+                        }
+                        map.remove(removeKey) shouldBe removeRes
+                    } else {
+                        val v = random.nextFloat()
+                        entries.put(k, v)
+                        if (generateTestCaseCode) {
+                            println("map.put($k, ${v}F) shouldBe PutResult.OK")
+                        }
+                        map.put(k, v) shouldBe PutResult.OK
                     }
-                    map.remove(removeKey) shouldBe removeRes
-                } else {
-                    val v = random.nextFloat()
-                    entries.put(k, v)
-                    if (generateTestCaseCode) {
-                        println("map.put($k, ${v}F) shouldBe PutResult.OK")
-                    }
-                    map.put(k, v) shouldBe PutResult.OK
                 }
-            }
 
-            if (generateTestCaseCode) {
-                println("// Assertions")
-            }
-
-            if (generateTestCaseCode) {
-                println("map.size() shouldBe ${entries.size}")
-            }
-            map.size() shouldBe entries.size
-            (0..limit).forEach { k ->
-                val expectedValue = entries[k]
-                val v = map.get(k, Float.MIN_VALUE)
                 if (generateTestCaseCode) {
-                    println("map.get($k, ${Float.MIN_VALUE}F) shouldBe ${expectedValue ?: Float.MIN_VALUE}F")
+                    println("// Assertions")
                 }
-                v shouldBe (expectedValue ?: Float.MIN_VALUE)
+
+                if (generateTestCaseCode) {
+                    println("map.size() shouldBe ${entries.size}")
+                }
+                map.size() shouldBe entries.size
+                (0..limit).forEach { k ->
+                    val expectedValue = entries[k]
+                    val v = map.get(k, Float.MIN_VALUE)
+                    if (generateTestCaseCode) {
+                        println("map.get($k, ${Float.MIN_VALUE}F) shouldBe ${expectedValue ?: Float.MIN_VALUE}F")
+                    }
+                    v shouldBe (expectedValue ?: Float.MIN_VALUE)
+                }
             }
         }
     }
@@ -323,7 +337,7 @@ class StraightHashMapTests : StringSpec() {
 
     companion object {
         private fun createMap_Int_Float(
-                maxEntries: Int, loadFactor: Double = 0.75
+                maxEntries: Int, hasher: Hasher_Int, loadFactor: Double = 0.75
         ): StraightHashMap_Int_Float {
             val mapInfo = MapInfo.calcFor(
                     maxEntries, loadFactor, StraightHashMapType_Int_Float.bucketLayout.size
@@ -333,7 +347,7 @@ class StraightHashMapTests : StringSpec() {
                     MutableUnsafeBuffer(buffer),
                     StraightHashMapType_Int_Float.keySerializer,
                     StraightHashMapType_Int_Float.valueSerializer,
-                    StraightHashMapType_Int_Float.hasherProvider.getHasher(Hash32.serial)
+                    hasher
             )
             val file = AtomicRefCounted(
                     MappedFile("<map>", MutableUnsafeBuffer(buffer))
