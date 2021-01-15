@@ -8,7 +8,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.3")
+        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.6")
     }
 }
 
