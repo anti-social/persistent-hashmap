@@ -38,11 +38,7 @@ object StraightHashMapType_Int_Float :
             file: RefCounted<MappedFile<IOBuffer>>,
             collectStats: Boolean
     ): StraightHashMapRO_Int_Float {
-        return StraightHashMapROImpl_Int_Float(
-                version,
-                file,
-                if (collectStats) DefaultStatsCollector() else DummyStatsCollector()
-        )
+        return StraightHashMapROImpl_Int_Float(version, file)
     }
 
     override fun copyMap(
@@ -64,7 +60,6 @@ interface StraightHashMapRO_Int_Float : StraightHashMapRO {
     fun get(key: K, defaultValue: V): V
     fun tombstones(): Int
 
-    fun stats(): StatsCollector
     fun dump(dumpContent: Boolean): String
 }
 
@@ -85,11 +80,9 @@ interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float, StraightHashM
     fun iterator(): StraightHashMapIterator_Int_Float
 }
 
-open class StraightHashMapROImpl_Int_Float
-@JvmOverloads constructor(
+open class StraightHashMapROImpl_Int_Float(
         override val version: Long,
-        private val file: RefCounted<MappedFile<IOBuffer>>,
-        private val statsCollector: StatsCollector = DummyStatsCollector()
+        private val file: RefCounted<MappedFile<IOBuffer>>
 ) : StraightHashMapRO_Int_Float {
 
     private val buffer = file.get().buffer
@@ -118,8 +111,6 @@ open class StraightHashMapROImpl_Int_Float
 
     final override fun loadBookmark(ix: Int): Long = header.loadBookmark(buffer, ix)
     final override fun loadAllBookmarks() = header.loadAllBookmarks(buffer)
-
-    override fun stats() = statsCollector
 
     override fun toString() = dump(false)
 
@@ -216,7 +207,7 @@ open class StraightHashMapROImpl_Int_Float
     override fun contains(key: K): Boolean {
         find(
                 key,
-                found = { _, bucketOffset, meta, dist ->
+                found = { _, bucketOffset, meta, _ ->
                     var m = meta
                     while (true) {
                         val meta2 = readBucketMeta(bucketOffset)
@@ -225,15 +216,12 @@ open class StraightHashMapROImpl_Int_Float
                         }
                         m = meta2
                         if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
-                            statsCollector.addGet(false, dist)
                             return false
                         }
                     }
-                    statsCollector.addGet(true, dist)
                     return true
                 },
-                notFound = { _, _, _, _, dist ->
-                    statsCollector.addGet(false, dist)
+                notFound = { _, _, _, _, _ ->
                     return false
                 }
         )
@@ -243,7 +231,7 @@ open class StraightHashMapROImpl_Int_Float
     override fun get(key: K, defaultValue: V): V {
         find(
                key,
-               found = { _, bucketOffset, meta, dist ->
+               found = { _, bucketOffset, meta, _ ->
                    var meta1 = meta
                    var value: V
                    while (true) {
@@ -254,15 +242,12 @@ open class StraightHashMapROImpl_Int_Float
                        }
                        meta1 = meta2
                        if (!isBucketOccupied(meta1) || key != readKey(bucketOffset)) {
-                           statsCollector.addGet(false, dist)
                            return defaultValue
                        }
                    }
-                   statsCollector.addGet(true, dist)
                    return value
                },
-               notFound = { _, _, _, _, dist ->
-                   statsCollector.addGet(false, dist)
+               notFound = { _, _, _, _, _ ->
                    return defaultValue
                }
         )
@@ -304,16 +289,10 @@ open class StraightHashMapROImpl_Int_Float
     }
 }
 
-class StraightHashMapImpl_Int_Float
-@JvmOverloads constructor(
+class StraightHashMapImpl_Int_Float(
         version: Long,
-        private val file: RefCounted<MappedFile<MutableIOBuffer>>,
-        statsCollector: StatsCollector = DummyStatsCollector()
-) : StraightHashMap_Int_Float, StraightHashMapROImpl_Int_Float(
-        version,
-        file,
-        statsCollector
-) {
+        private val file: RefCounted<MappedFile<MutableIOBuffer>>
+) : StraightHashMap_Int_Float, StraightHashMapROImpl_Int_Float(version, file) {
     private val buffer = file.get().buffer
 
     protected fun writeSize(size: Int) {
