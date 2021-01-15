@@ -25,7 +25,8 @@ public class StraightHashMapStressTest {
     public StraightHashMapStressTest() {
         MapInfo mapInfo = MapInfo.Companion.calcFor(
                 5, 0.75,
-                StraightHashMapType_Int_Float.INSTANCE.getBucketLayout().getSize()
+                StraightHashMapType_Int_Float.INSTANCE.getBucketLayout().getSize(),
+                0
         );
         ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mapInfo.getBufferSize());
         MutableIOBuffer buffer = new MutableUnsafeBuffer(byteBuffer);
@@ -33,16 +34,14 @@ public class StraightHashMapStressTest {
                 buffer,
                 StraightHashMapType_Int_Float.INSTANCE.getKeySerializer(),
                 StraightHashMapType_Int_Float.INSTANCE.getValueSerializer(),
-                StraightHashMapType_Int_Float.INSTANCE.getHasherProvider()
-                        .getHasher(Hash32.INSTANCE.getSerial())
+                Hash32.INSTANCE
         );
         map = new StraightHashMapImpl_Int_Float(
                 0L,
                 new AtomicRefCounted<>(
                         new MappedFile<>("<map>", buffer),
                         (buf) -> Unit.INSTANCE
-                ),
-                new DummyStatsCollector()
+                )
         );
         assert map.getCapacity() == 7;
         map.put(-6, -106);
@@ -54,8 +53,7 @@ public class StraightHashMapStressTest {
                 new AtomicRefCounted<>(
                         new MappedFile<>("<ro-map>", roBuffer),
                         (buf) -> Unit.INSTANCE
-                ),
-                new DummyStatsCollector()
+                )
         );
     }
 

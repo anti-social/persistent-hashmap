@@ -8,6 +8,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
+        // Comment kapt plugin before running jcstress tests
         classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.6")
     }
 }
