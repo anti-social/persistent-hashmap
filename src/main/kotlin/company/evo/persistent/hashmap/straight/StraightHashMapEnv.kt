@@ -22,8 +22,6 @@ abstract class StraightHashMapBaseEnv protected constructor(
 ) : AutoCloseable
 {
     companion object {
-        const val MAX_DISTANCE = 1024
-
         fun getHashmapFilename(version: Long) = "hashmap_$version.data"
     }
 
@@ -159,6 +157,11 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
             this.loadFactor = loadFactor
         }
 
+        var maxDistance: Int = 0
+        fun maxDistance(maxDist: Int) = apply {
+            this.maxDistance = maxDist
+        }
+
         var useUnmapHack: Boolean = false
         fun useUnmapHack(useUnmapHack: Boolean) = apply {
             this.useUnmapHack = useUnmapHack
@@ -195,7 +198,7 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
-                    initialEntries, loadFactor, mapType.bucketLayout.size
+                    initialEntries, loadFactor, mapType.bucketLayout.size,  maxDistance
             )
             dir.createFile(filename, mapInfo.bufferSize).use { file ->
                 mapInfo.initBuffer(
@@ -234,7 +237,7 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
         val version = oldMap.version + 1
         val bookmarks = oldMap.loadAllBookmarks()
         val mapInfo = MapInfo.calcFor(
-                maxEntries, loadFactor, mapType.bucketLayout.size
+                maxEntries, loadFactor, mapType.bucketLayout.size, oldMap.maxDistance
         )
         val mapFilename = tempFileName()
         val mappedFile = dir.createFile(

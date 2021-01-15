@@ -100,6 +100,7 @@ open class StraightHashMapROImpl_Int_Float(
     protected val hasher: Hasher_K = header.hasher
 
     final override val maxEntries = header.maxEntries
+    final override val maxDistance = header.maxDistance
     final override val capacity = header.capacity
 
     override fun close() {
@@ -274,7 +275,7 @@ open class StraightHashMapROImpl_Int_Float(
                 tombstoneBucketOffset = bucketOffset
                 tombstoneMeta = meta
             } else {
-                if (isBucketFree(meta) || dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+                if (isBucketFree(meta) || dist > maxDistance) {
                     notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
                     break
                 }
@@ -342,7 +343,7 @@ class StraightHashMapImpl_Int_Float(
                     return PutResult.OK
                 },
                 notFound = { bucketOffset, meta, tombstoneOffset, tombstoneMeta, dist ->
-                    if (dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+                    if (dist > maxDistance) {
                         return PutResult.OVERFLOW
                     }
                     if (size() >= header.maxEntries) {

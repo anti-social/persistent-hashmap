@@ -22,6 +22,7 @@ interface StraightHashMapRO : AutoCloseable {
     val version: Long
     val name: String
     val maxEntries: Int
+    val maxDistance: Int
     val capacity: Int
     fun size(): Int
 
@@ -57,6 +58,7 @@ data class MapInfo(
         val capacity: Int,
         val bucketsPerPage: Int,
         val numDataPages: Int,
+        val maxDistance: Int,
         val bufferSize: Int
 ) {
     companion object {
@@ -72,7 +74,10 @@ data class MapInfo(
         const val VER_TAG_BITS = 14
         const val VER_TAG_MASK = (1 shl VER_TAG_BITS) - 1
 
-        fun calcFor(maxEntries: Int, loadFactor: Double, bucketSize: Int): MapInfo {
+        fun calcFor(
+                maxEntries: Int, loadFactor: Double, bucketSize: Int,
+                maxDistance: Int = Int.MAX_VALUE
+        ): MapInfo {
             val capacity = calcCapacity(maxEntries, loadFactor)
             val bucketsPerPage = calcBucketsPerPage(bucketSize)
             val numDataPages = calcDataPages(capacity, bucketsPerPage)
@@ -82,6 +87,7 @@ data class MapInfo(
                     capacity = capacity,
                     bucketsPerPage = bucketsPerPage,
                     numDataPages = numDataPages,
+                    maxDistance = maxDistance,
                     bufferSize = (1 + numDataPages) * PAGE_SIZE
             )
         }
@@ -107,7 +113,7 @@ data class MapInfo(
             hasher: Hasher
     ) {
         val header = Header(
-                capacity, maxEntries,
+                capacity, maxEntries, maxDistance,
                 keySerializer, valueSerializer,
                 hasher
         )
@@ -118,6 +124,7 @@ data class MapInfo(
 class Header<out H: Hasher>(
         val capacity: Int,
         val maxEntries: Int,
+        val maxDistance: Int,
         val keySerializer: Serializer,
         val valueSerializer: Serializer,
         val hasher: H
@@ -129,6 +136,7 @@ class Header<out H: Hasher>(
         const val MAX_ENTRIES_OFFSET = 24
         const val SIZE_OFFSET = 32
         const val TOMBSTONES_OFFSET = 40
+        const val MAX_DISTANCE_OFFSET = 48
 
         // Flags
         private const val TYPE_BITS = 3
@@ -141,7 +149,9 @@ class Header<out H: Hasher>(
 
         const val NUM_BOOKMARKS = 32
 
-        inline fun <K, V, reified H: Hasher> load(buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>): Header<H> {
+        inline fun <K, V, reified H: Hasher> load(
+                buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>
+        ): Header<H> {
             val magic = ByteArray(MAGIC.size)
             buffer.readBytes(0, magic)
             if (!magic.contentEquals(MAGIC)) {
@@ -168,21 +178,33 @@ class Header<out H: Hasher>(
             val hasher = HasherProvider.getHashProvider<K, H>(keyClazz)
                     .getHasher(getHasherSerial(flags)) as? H
                     ?: throw InvalidHashtableException("Mismatched hasher for a key type")
-            val capacity = toIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
-            val maxEntries = toIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
+            val capacity = toPositiveIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
+            val maxEntries = toPositiveIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
+            val maxDistance = toPositiveIntOrFail(buffer.readLong(MAX_DISTANCE_OFFSET), "maxDistance")
+                    .let { maxDist ->
+                        if (maxDist <= 0) {
+                            Int.MAX_VALUE
+                        } else {
+                            maxDist
+                        }
+                    }
             return Header(
                     capacity = capacity,
                     maxEntries = maxEntries,
+                    maxDistance = maxDistance,
                     keySerializer = keySerializer,
                     valueSerializer = valueSerializer,
                     hasher = hasher
             )
         }
 
-        fun toIntOrFail(v: Long, property: String): Int {
+        fun toPositiveIntOrFail(v: Long, property: String): Int {
+            if (v < 0) {
+                throw InvalidHashtableException("$property must not be negative but was: $v")
+            }
             if (v > Int.MAX_VALUE) {
                 throw InvalidHashtableException(
-                        "Currently maximum supported $property is: ${Int.MAX_VALUE}, but was: $v"
+                        "Maximum supported $property value is: ${Int.MAX_VALUE}, but was: $v"
                 )
             }
             return v.toInt()
@@ -221,6 +243,7 @@ class Header<out H: Hasher>(
         buffer.writeLong(MAX_ENTRIES_OFFSET, maxEntries.toLong())
         buffer.writeLong(SIZE_OFFSET, 0)
         buffer.writeLong(TOMBSTONES_OFFSET, 0)
+        buffer.writeLong(MAX_DISTANCE_OFFSET, 0)
     }
 
     fun loadBookmark(buffer: IOBuffer, bookmarkIx: Int): Long {
