@@ -16,6 +16,7 @@ plugins {
 dependencies {
     // jmh("org.openjdk.jmh", "jmh-core", "1.20")
     jmh(project(":"))
+    jmh(kotlin("stdlib-jdk8"))
     jmh("net.sf.trove4j:core:3.1.0")
 }
 
