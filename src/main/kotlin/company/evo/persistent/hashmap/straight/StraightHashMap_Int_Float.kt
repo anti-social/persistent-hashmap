@@ -97,6 +97,7 @@ open class StraightHashMapROImpl_Int_Float(
     val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
 
     val header = Header.load<K, V, Hasher_K>(buffer, K::class.java, V::class.java)
+    // TODO: make hasher public
     protected val hasher: Hasher_K = header.hasher
 
     final override val maxEntries = header.maxEntries

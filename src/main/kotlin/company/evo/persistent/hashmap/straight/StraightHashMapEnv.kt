@@ -134,6 +134,9 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
                 getHasher(serial)
             }
         }
+        fun hasher(hasher: H) = apply {
+            this.hasher = hasher
+        }
 
         var initialEntries: Int = DEFAULT_INITIAL_ENTRIES
             private set

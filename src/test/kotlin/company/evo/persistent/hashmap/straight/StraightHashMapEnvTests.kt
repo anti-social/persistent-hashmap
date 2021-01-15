@@ -1,6 +1,8 @@
 package company.evo.persistent.hashmap.straight
 
 import company.evo.persistent.VersionedDirectoryException
+import company.evo.persistent.hashmap.Dummy32
+import company.evo.persistent.hashmap.Knuth32
 import company.evo.persistent.util.withTempDir
 
 import io.kotlintest.shouldBe
@@ -181,6 +183,52 @@ class StraightHashMapEnvTests : FunSpec() {
                     .use { env ->
                         env.openMap()
                     }
+        }
+
+        test("env: change hashing") {
+            withTempDir { tmpDir ->
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .hasher(Dummy32)
+                        .useUnmapHack(true)
+                        .open(tmpDir)
+                        .use { env ->
+                            env.openMap().use { map ->
+                                map as StraightHashMapImpl_Int_Float
+                                map.header.hasher shouldBe Dummy32
+
+                                map.put(1, 1.1F) shouldBe PutResult.OK
+                            }
+                        }
+
+                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                        .hasher(Knuth32)
+                        .useUnmapHack(true)
+                        .open(tmpDir)
+                        .use { env ->
+                            env.openMap().use { map ->
+                                map as StraightHashMapImpl_Int_Float
+                                map.header.hasher shouldBe Dummy32
+
+                                StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+                                        .useUnmapHack(true)
+                                        .openReadOnly(tmpDir)
+                                        .use { roEnv ->
+                                            (roEnv.getCurrentMap() as StraightHashMapROImpl_Int_Float).header.hasher shouldBe Dummy32
+
+                                            env.copyMap(map).use { newMap ->
+                                                newMap as StraightHashMapImpl_Int_Float
+                                                newMap.header.hasher shouldBe Knuth32
+                                                env.commit(newMap)
+                                            }
+
+                                            val roMap = roEnv.getCurrentMap()
+                                            (roMap as StraightHashMapROImpl_Int_Float).header.hasher shouldBe Knuth32
+                                            roMap.get(1, 0.0F) shouldBe 1.1F
+                                        }
+
+                            }
+                        }
+            }
         }
     }
 }
