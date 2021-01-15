@@ -38,11 +38,7 @@ object StraightHashMapType_Int_Float :
             file: RefCounted<MappedFile<IOBuffer>>,
             collectStats: Boolean
     ): StraightHashMapRO_Int_Float {
-        return StraightHashMapROImpl_Int_Float(
-                version,
-                file,
-                if (collectStats) DefaultStatsCollector() else DummyStatsCollector()
-        )
+        return StraightHashMapROImpl_Int_Float(version, file)
     }
 
     override fun copyMap(
@@ -64,7 +60,6 @@ interface StraightHashMapRO_Int_Float : StraightHashMapRO {
     fun get(key: K, defaultValue: V): V
     fun tombstones(): Int
 
-    fun stats(): StatsCollector
     fun dump(dumpContent: Boolean): String
 }
 
@@ -85,11 +80,9 @@ interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float, StraightHashM
     fun iterator(): StraightHashMapIterator_Int_Float
 }
 
-open class StraightHashMapROImpl_Int_Float
-@JvmOverloads constructor(
+open class StraightHashMapROImpl_Int_Float(
         override val version: Long,
-        private val file: RefCounted<MappedFile<IOBuffer>>,
-        private val statsCollector: StatsCollector = DummyStatsCollector()
+        private val file: RefCounted<MappedFile<IOBuffer>>
 ) : StraightHashMapRO_Int_Float {
 
     private val buffer = file.get().buffer
@@ -104,9 +97,11 @@ open class StraightHashMapROImpl_Int_Float
     val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
 
     val header = Header.load<K, V, Hasher_K>(buffer, K::class.java, V::class.java)
+    // TODO: make hasher public
     protected val hasher: Hasher_K = header.hasher
 
     final override val maxEntries = header.maxEntries
+    final override val maxDistance = header.maxDistance
     final override val capacity = header.capacity
 
     override fun close() {
@@ -118,8 +113,6 @@ open class StraightHashMapROImpl_Int_Float
 
     final override fun loadBookmark(ix: Int): Long = header.loadBookmark(buffer, ix)
     final override fun loadAllBookmarks() = header.loadAllBookmarks(buffer)
-
-    override fun stats() = statsCollector
 
     override fun toString() = dump(false)
 
@@ -151,11 +144,6 @@ open class StraightHashMapROImpl_Int_Float
     protected fun isBucketTombstoned(meta: Int) = (meta and MapInfo.META_TOMBSTONE) != 0
 
     protected fun bucketVersion(meta: Int) = meta and MapInfo.VER_TAG_MASK
-
-    protected fun getBucketIx(hash: Int, dist: Int): Int {
-        val h = (hash + dist) and Int.MAX_VALUE
-        return  h % header.capacity
-    }
 
     protected fun nextBucketIx(bucketIx: Int): Int {
         if (bucketIx >= header.capacity - 1) {
@@ -221,7 +209,7 @@ open class StraightHashMapROImpl_Int_Float
     override fun contains(key: K): Boolean {
         find(
                 key,
-                found = { _, bucketOffset, meta, dist ->
+                found = { _, bucketOffset, meta, _ ->
                     var m = meta
                     while (true) {
                         val meta2 = readBucketMeta(bucketOffset)
@@ -230,15 +218,12 @@ open class StraightHashMapROImpl_Int_Float
                         }
                         m = meta2
                         if (!isBucketOccupied(m) || key != readKey(bucketOffset)) {
-                            statsCollector.addGet(false, dist)
                             return false
                         }
                     }
-                    statsCollector.addGet(true, dist)
                     return true
                 },
-                notFound = { _, _, _, _, dist ->
-                    statsCollector.addGet(false, dist)
+                notFound = { _, _, _, _, _ ->
                     return false
                 }
         )
@@ -248,7 +233,7 @@ open class StraightHashMapROImpl_Int_Float
     override fun get(key: K, defaultValue: V): V {
         find(
                key,
-               found = { _, bucketOffset, meta, dist ->
+               found = { _, bucketOffset, meta, _ ->
                    var meta1 = meta
                    var value: V
                    while (true) {
@@ -259,15 +244,12 @@ open class StraightHashMapROImpl_Int_Float
                        }
                        meta1 = meta2
                        if (!isBucketOccupied(meta1) || key != readKey(bucketOffset)) {
-                           statsCollector.addGet(false, dist)
                            return defaultValue
                        }
                    }
-                   statsCollector.addGet(true, dist)
                    return value
                },
-               notFound = { _, _, _, _, dist ->
-                   statsCollector.addGet(false, dist)
+               notFound = { _, _, _, _, _ ->
                    return defaultValue
                }
         )
@@ -280,42 +262,39 @@ open class StraightHashMapROImpl_Int_Float
             notFound: (bucketOffset: Int, meta: Int, tombstoneOffset: Int, tombstoneMeta: Int, dist: Int) -> Unit
     ) {
         val hash = hasher.hash(key)
+        var bucketIx = hash % capacity
+        var probe = 0
         var dist = -1
         var tombstoneBucketOffset = -1
         var tombstoneMeta = -1
         while(true) {
             dist++
-            val bucketIx = getBucketIx(hash, dist)
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
             if (isBucketTombstoned(meta)) {
                 tombstoneBucketOffset = bucketOffset
                 tombstoneMeta = meta
-                continue
+            } else {
+                if (isBucketFree(meta) || dist > maxDistance) {
+                    notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
+                    break
+                }
+                if (key == readKey(bucketOffset)) {
+                    found(bucketIx, bucketOffset, meta, dist)
+                    break
+                }
             }
-            if (isBucketFree(meta) || dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
-                notFound(bucketOffset, meta, tombstoneBucketOffset, tombstoneMeta, dist)
-                break
-            }
-            if (key == readKey(bucketOffset)) {
-                found(bucketIx, bucketOffset, meta, dist)
-                break
-            }
+            probe++
+            bucketIx = hasher.probe(probe, bucketIx, hash, capacity)
         }
     }
 }
 
-class StraightHashMapImpl_Int_Float
-@JvmOverloads constructor(
+class StraightHashMapImpl_Int_Float(
         version: Long,
-        private val file: RefCounted<MappedFile<MutableIOBuffer>>,
-        statsCollector: StatsCollector = DummyStatsCollector()
-) : StraightHashMap_Int_Float, StraightHashMapROImpl_Int_Float(
-        version,
-        file,
-        statsCollector
-) {
+        private val file: RefCounted<MappedFile<MutableIOBuffer>>
+) : StraightHashMap_Int_Float, StraightHashMapROImpl_Int_Float(version, file) {
     private val buffer = file.get().buffer
 
     protected fun writeSize(size: Int) {
@@ -365,7 +344,7 @@ class StraightHashMapImpl_Int_Float
                     return PutResult.OK
                 },
                 notFound = { bucketOffset, meta, tombstoneOffset, tombstoneMeta, dist ->
-                    if (dist > StraightHashMapBaseEnv.MAX_DISTANCE) {
+                    if (dist > maxDistance) {
                         return PutResult.OVERFLOW
                     }
                     if (size() >= header.maxEntries) {
@@ -390,20 +369,25 @@ class StraightHashMapImpl_Int_Float
         find(
                 key,
                 found = { bucketIx, bucketOffset, meta, _ ->
-                    val nextBucketIx = nextBucketIx(bucketIx)
-                    val nextBucketPageOffset = getPageOffset(nextBucketIx)
-                    val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
-                    val nextMeta = readBucketMeta(nextBucketOffset)
+                    // For sequential hashers we can mark removed bucket as free
+                    // if next bucket is free
+                    if (hasher.isSequential()) {
+                        val nextBucketIx = nextBucketIx(bucketIx)
+                        val nextBucketPageOffset = getPageOffset(nextBucketIx)
+                        val nextBucketOffset = getBucketOffset(nextBucketPageOffset, nextBucketIx)
+                        val nextMeta = readBucketMeta(nextBucketOffset)
 
-                    if (isBucketFree(nextMeta)) {
-                        writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() - cleanupTombstones(bucketIx))
-                        writeSize(size() - 1)
-                    } else {
-                        writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
-                        writeTombstones(tombstones() + 1)
-                        writeSize(size() - 1)
+                        if (isBucketFree(nextMeta)) {
+                            // TODO: Also free previous buckets if they are tombstones
+                            writeBucketMeta(bucketOffset, MapInfo.META_FREE, bucketVersion(meta) + 1)
+                            writeTombstones(tombstones() - cleanupTombstones(bucketIx))
+                            writeSize(size() - 1)
+                            return true
+                        }
                     }
+                    writeBucketMeta(bucketOffset, MapInfo.META_TOMBSTONE, bucketVersion(meta) + 1)
+                    writeTombstones(tombstones() + 1)
+                    writeSize(size() - 1)
                     return true
                 },
                 notFound = { _, _, _, _, _ ->

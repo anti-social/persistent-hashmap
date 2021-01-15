@@ -8,7 +8,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.3")
+        // Comment kapt plugin before running jcstress tests
+        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.6")
     }
 }
 
@@ -40,8 +41,8 @@ dependencies {
     val kotlintestVersion = "3.1.11"
     val lincheckVersion = "2.0"
 
-    compile(kotlin("stdlib-jdk8"))
-    compile(kotlin("reflect"))
+    implementation(kotlin("stdlib-jdk8"))
+    implementation(kotlin("reflect"))
 
     compileOnly(project(":processor"))
     kapt(project(":processor"))
