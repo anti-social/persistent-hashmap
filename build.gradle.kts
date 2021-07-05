@@ -16,14 +16,13 @@ plugins {
     `maven-publish`
     kotlin("jvm") version "1.5.20"
     kotlin("kapt") version "1.5.20"
-    id("org.ajoberstar.grgit") version "3.1.1"
+    id("org.ajoberstar.grgit") version "4.1.0"
 }
 
 apply {
     plugin("jcstress")
 }
 
-val grgit: org.ajoberstar.grgit.Grgit by extra
 val tag = grgit.describe(mapOf("tags" to true, "match" to listOf("v*"))) ?: "v0.0.0"
 
 group = "company.evo"
