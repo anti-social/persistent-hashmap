@@ -9,23 +9,36 @@ import company.evo.persistent.hashmap.Hasher_Int
 import company.evo.persistent.hashmap.Knuth32
 import company.evo.rc.AtomicRefCounted
 
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.data.forAll
+import io.kotest.data.headers
+import io.kotest.data.row
+import io.kotest.data.table
+import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.RandomSource
+import io.kotest.property.Sample
+import io.kotest.property.arbitrary.arbitrary
+
 import java.nio.ByteBuffer
 import java.util.Random
+import kotlin.random.nextInt
+import kotlinx.coroutines.yield
 
-import io.kotlintest.properties.Gen
-import io.kotlintest.shouldBe
-import io.kotlintest.specs.StringSpec
-import io.kotlintest.tables.forAll
-import io.kotlintest.tables.headers
-import io.kotlintest.tables.row
-import io.kotlintest.tables.table
+//import io.kotlintest.properties.Gen
+//import io.kotlintest.shouldBe
+//import io.kotlintest.specs.StringSpec
+//import io.kotlintest.tables.forAll
+//import io.kotlintest.tables.headers
+//import io.kotlintest.tables.row
+//import io.kotlintest.tables.table
 
 class StraightHashMapTests : StringSpec() {
-    private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
-    private val random = Random(seed)
+    // private val seed = System.getProperty("test.random.seed")?.toLong() ?: Random().nextLong()
+    // private val random = Random(seed)
 
     init {
-        println("The seed for <$this> test cases is: $seed")
+        // println("The seed for <$this> test cases is: $seed")
 
         "int float: test overflow" {
             createMap_Int_Float(5, Hash32).use { map ->
@@ -177,55 +190,53 @@ class StraightHashMapTests : StringSpec() {
                 map.maxEntries shouldBe limit
                 map.capacity shouldBe expectedCapacity
 
-                val keysGen = object : Gen<Int> {
-                    val keysStream = random.ints(0, limit / 2)
-                    var collisionCandidate = Int.MIN_VALUE
-                    var removeCandidate = Int.MIN_VALUE
-
-                    override fun constants(): Iterable<Int> = emptyList()
-
-                    override fun random(): Sequence<Int> = sequence {
-                        for (v in keysStream) {
-                            removeCandidate = when {
-                                random.nextInt(3) == 0 -> {
-                                    // Generate collisions
-                                    val k = random.nextInt(limit * 10)
-                                    val ix = collisionCandidate % expectedCapacity
-                                    val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
-                                    yield(collidedValue)
-                                    collidedValue
-
+                val lastKeys = IntArray((expectedCapacity / 10).coerceAtLeast(1))
+                var lastKeyIx = 0
+                val keysGen = arbitrary { rs ->
+                    val v = rs.random.nextInt(0, limit / 2)
+                    when (rs.random.nextInt(5)) {
+                        in 0..4 -> {
+                            val key = rs.random.nextInt(limit * 10)
+                            lastKeys[lastKeyIx % lastKeys.size] = key
+                            lastKeyIx++
+                            Action.Put(key, rs.random.nextFloat())
+                        }
+                        else -> {
+                            when (rs.random.nextInt(3)) {
+                                0 -> {
+                                    val key = lastKeys[(lastKeyIx % lastKeys.size).coerceAtMost(lastKeyIx)]
+                                    Action.Put(key, rs.random.nextFloat())
                                 }
-                                random.nextInt(4) == 0 -> {
-                                    yield(-removeCandidate)
-                                    collisionCandidate
+                                1 -> {
+                                    val key = lastKeys[(lastKeyIx % lastKeys.size).coerceAtMost(lastKeyIx)]
+                                    Action.Remove(key)
                                 }
                                 else -> {
-                                    yield(v)
-                                    v
+                                    val key = rs.random.nextInt(limit * 10)
+                                    Action.Remove(key)
                                 }
                             }
-                            if (random.nextInt(10) == 0 || collisionCandidate == Int.MIN_VALUE) {
-                                collisionCandidate = v
-                            }
+
                         }
                     }
                 }
-                keysGen.random().take(limit).forEach { k ->
-                    if (k < 0) {
-                        val removeKey = -k
-                        val removeRes = entries.remove(removeKey) != null
-                        if (generateTestCaseCode) {
-                            println("map.remove($removeKey) shouldBe $removeRes")
+
+                keysGen.samples().take(limit).forEach { s ->
+                    when (val a = s.value) {
+                        is Action.Put -> {
+                            entries.put(a.key, a.value)
+                            if (generateTestCaseCode) {
+                                println("map.put(${a.key}, ${a.value}F) shouldBe PutResult.OK")
+                            }
+                            map.put(a.key, a.value) shouldBe PutResult.OK
                         }
-                        map.remove(removeKey) shouldBe removeRes
-                    } else {
-                        val v = random.nextFloat()
-                        entries.put(k, v)
-                        if (generateTestCaseCode) {
-                            println("map.put($k, ${v}F) shouldBe PutResult.OK")
+                        is Action.Remove -> {
+                            val removeRes = entries.remove(a.key) != null
+                            if (generateTestCaseCode) {
+                                println("map.remove(${a.key}) shouldBe $removeRes")
+                            }
+                            map.remove(a.key) shouldBe removeRes
                         }
-                        map.put(k, v) shouldBe PutResult.OK
                     }
                 }
 
@@ -264,55 +275,52 @@ class StraightHashMapTests : StringSpec() {
             map.maxEntries shouldBe limit
             map.capacity shouldBe expectedCapacity
 
-            val keysGen = object : Gen<Long> {
-                val keysStream = random.longs(0, limit / 2L)
-                var collisionCandidate = Long.MIN_VALUE
-                var removeCandidate = Long.MIN_VALUE
-
-                override fun constants(): Iterable<Long> = emptyList()
-
-                override fun random(): Sequence<Long> = sequence {
-                    for (v in keysStream) {
-                        removeCandidate = when {
-                            random.nextInt(3) == 0 -> {
-                                // Generate collisions
-                                val k = random.nextInt(limit * 10).toLong()
-                                val ix = collisionCandidate % expectedCapacity
-                                val collidedValue = v * k / expectedCapacity * expectedCapacity + ix
-                                yield(collidedValue)
-                                collidedValue
-
+            val lastKeys = LongArray((expectedCapacity / 10).coerceAtLeast(1))
+            var lastKeyIx = 0
+            val keysGen = arbitrary { rs ->
+                val v = rs.random.nextLong(0, limit.toLong() / 2)
+                when (rs.random.nextInt(5)) {
+                    in 0..4 -> {
+                        val key = rs.random.nextLong(limit.toLong() * 10)
+                        lastKeys[lastKeyIx % lastKeys.size] = key
+                        lastKeyIx++
+                        Action.Put(key, rs.random.nextDouble())
+                    }
+                    else -> {
+                        when (rs.random.nextInt(3)) {
+                            0 -> {
+                                val key = lastKeys[(lastKeyIx % lastKeys.size).coerceAtMost(lastKeyIx)]
+                                Action.Put(key, rs.random.nextDouble())
                             }
-                            random.nextInt(4) == 0 -> {
-                                yield(-removeCandidate)
-                                collisionCandidate
+                            1 -> {
+                                val key = lastKeys[(lastKeyIx % lastKeys.size).coerceAtMost(lastKeyIx)]
+                                Action.Remove(key)
                             }
                             else -> {
-                                yield(v)
-                                v
+                                val key = rs.random.nextLong(limit.toLong() * 10)
+                                Action.Remove(key)
                             }
                         }
-                        if (random.nextInt(10) == 0 || collisionCandidate == Long.MIN_VALUE) {
-                            collisionCandidate = v
-                        }
+
                     }
                 }
             }
-            keysGen.random().take(limit).forEach { k ->
-                if (k < 0) {
-                    val removeKey = -k
-                    val removeRes = entries.remove(removeKey) != null
-                    if (generateTestCaseCode) {
-                        println("map.remove($removeKey) shouldBe $removeRes")
+            keysGen.samples().take(limit).forEach { s ->
+                when (val a = s.value) {
+                    is Action.Put -> {
+                        entries.put(a.key, a.value)
+                        if (generateTestCaseCode) {
+                            println("map.put(${a.key}, ${a.value}F) shouldBe PutResult.OK")
+                        }
+                        map.put(a.key, a.value) shouldBe PutResult.OK
                     }
-                    map.remove(removeKey) shouldBe removeRes
-                } else {
-                    val v = random.nextDouble()
-                    entries.put(k, v)
-                    if (generateTestCaseCode) {
-                        println("map.put($k, ${v}F) shouldBe PutResult.OK")
+                    is Action.Remove -> {
+                        val removeRes = entries.remove(a.key) != null
+                        if (generateTestCaseCode) {
+                            println("map.remove(${a.key}) shouldBe $removeRes")
+                        }
+                        map.remove(a.key) shouldBe removeRes
                     }
-                    map.put(k, v) shouldBe PutResult.OK
                 }
             }
 
@@ -373,5 +381,10 @@ class StraightHashMapTests : StringSpec() {
             ) {}
             return StraightHashMapType_Long_Double.createWritable(0L, file)
         }
+    }
+
+    sealed class Action<K, V> {
+        class Put<K, V>(val key: K, val value: V) : Action<K, V>()
+        class Remove<K, V>(val key: K) : Action<K, V>()
     }
 }

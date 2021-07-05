@@ -4,10 +4,10 @@ import company.evo.persistent.VersionedDirectoryException
 import company.evo.persistent.hashmap.Dummy32
 import company.evo.persistent.hashmap.Knuth32
 import company.evo.persistent.util.withTempDir
+import io.kotest.assertions.throwables.shouldThrow
 
-import io.kotlintest.shouldBe
-import io.kotlintest.shouldThrow
-import io.kotlintest.specs.FunSpec
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
 
 class StraightHashMapEnvTests : FunSpec() {
     init {

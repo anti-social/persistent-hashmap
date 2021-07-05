@@ -1,42 +1,39 @@
 package company.evo.persistent.hashmap
 
-import io.kotlintest.properties.Gen
-import io.kotlintest.properties.forAll
-import io.kotlintest.specs.StringSpec
-
-import java.util.Random
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.property.Arb
+import io.kotest.property.RandomSource
+import io.kotest.property.Sample
+import io.kotest.property.arbitrary.int
+import io.kotest.property.forAll
 
 class HasherTests : StringSpec() {
     init {
         "knuth32 covers all buckets" {
-            forAll(1_000_000, primes, Gen.int()) { capacity, v ->
+            forAll(100, primes, Arb.int()) { capacity, v ->
                 val hash = Knuth32.hash(v)
                 var ix = hash % capacity
-                val ixs = mutableSetOf<Int>()
-                for (probe in 0 until capacity * 10) {
+                val probedIxs = BooleanArray(capacity)
+                for (probe in 0 until capacity * 2) {
                     ix = Knuth32.probe(probe + 1, ix, hash, capacity)
-                    ixs.add(ix)
-                    if (ixs.size == capacity) {
-                        break
-                    }
+                    probedIxs[ix] = true
                 }
 
-                ixs.size == capacity
+                probedIxs.all { it }
             }
         }
     }
 
     companion object {
-        private val RANDOM = Random()
-        private const val FIRST_N_PRIMES = 10
+        private val MAX_PRIME = 100_663_319
+        private val MAX_PRIME_IX = PRIMES.binarySearch(MAX_PRIME)
 
-        private val primes = object : Gen<Int> {
-            override fun constants(): Iterable<Int> {
-                return PRIMES.asIterable().take(FIRST_N_PRIMES)
-            }
+        private val primes = object : Arb<Int>() {
+            override fun edgecase(rs: RandomSource): Int? = null
 
-            override fun random(): Sequence<Int> = generateSequence {
-                PRIMES[RANDOM.nextInt(FIRST_N_PRIMES)]
+            override fun sample(rs: RandomSource): Sample<Int> {
+
+                return Sample(PRIMES[rs.random.nextInt(MAX_PRIME_IX)])
             }
         }
     }

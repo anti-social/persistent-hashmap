@@ -37,7 +37,7 @@ repositories {
 }
 
 dependencies {
-    val kotlintestVersion = "3.1.11"
+    val kotestVersion = "4.6.0"
     val lincheckVersion = "2.14.1"
 
     implementation(kotlin("stdlib-jdk8"))
@@ -46,15 +46,15 @@ dependencies {
     compileOnly(project(":processor"))
     kapt(project(":processor"))
 
-    testImplementation("io.kotlintest", "kotlintest-core", kotlintestVersion)
-    testImplementation("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
-    testImplementation("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
+    testImplementation("io.kotest", "kotest-runner-junit5", kotestVersion)
+    testImplementation("io.kotest", "kotest-property", kotestVersion)
     testImplementation("org.jetbrains.kotlinx", "lincheck", lincheckVersion)
     testImplementation("commons-io", "commons-io", "2.6")
 }
 
 configure<JavaPluginConvention> {
     sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = JavaVersion.VERSION_1_8.toString()

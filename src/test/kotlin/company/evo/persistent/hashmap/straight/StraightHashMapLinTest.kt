@@ -1,6 +1,6 @@
 package company.evo.persistent.hashmap.straight
 
-import io.kotlintest.specs.FunSpec
+import io.kotest.core.spec.style.FunSpec
 
 import org.jetbrains.kotlinx.lincheck.LinChecker
 import org.jetbrains.kotlinx.lincheck.annotations.Operation
