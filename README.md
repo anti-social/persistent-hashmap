@@ -1,5 +1,4 @@
 [![Build Status](https://travis-ci.org/anti-social/persistent-hashmap.svg?branch=master)](https://travis-ci.org/anti-social/persistent-hashmap)
-[![Download](https://api.bintray.com/packages/evo/maven/persistent-hashmap/images/download.svg) ](https://bintray.com/evo/maven/persistent-hashmap/_latestVersion)
 
 # Persistent hashmap
 

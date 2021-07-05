@@ -9,12 +9,6 @@ script:
   ./gradlew test $GRADLE_ARGS
   ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
 
-after_success:
-- |
-  if [[ $TRAVIS_TAG == v* ]]; then
-    ./gradlew bintrayUpload $GRADLE_ARGS
-  fi
-
 before_cache:
 - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
 - rm -fr $HOME/.gradle/caches/*/plugin-resolution/

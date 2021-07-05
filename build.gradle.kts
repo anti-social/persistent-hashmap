@@ -1,6 +1,4 @@
 import com.github.erizo.gradle.JcstressPluginExtension
-import com.jfrog.bintray.gradle.BintrayExtension
-import java.util.Date
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 buildscript {
@@ -19,7 +17,6 @@ plugins {
     kotlin("jvm") version "1.5.20"
     kotlin("kapt") version "1.5.20"
     id("org.ajoberstar.grgit") version "3.1.1"
-    id("com.jfrog.bintray") version "1.8.4"
 }
 
 apply {
@@ -88,34 +85,4 @@ publishing {
             from(components["java"])
         }
     }
-}
-
-bintray {
-    user = if (hasProperty("bintrayUser")) {
-        property("bintrayUser").toString()
-    } else {
-        System.getenv("BINTRAY_USER")
-    }
-    key = if (hasProperty("bintrayApiKey")) {
-        property("bintrayApiKey").toString()
-    } else {
-        System.getenv("BINTRAY_API_KEY")
-    }
-    setPublications("mavenJar")
-
-    pkg(closureOf<BintrayExtension.PackageConfig> {
-        userOrg = "evo"
-        repo = "maven"
-        name = project.name
-        setLicenses("Apache-2.0")
-        setLabels("persistent", "datastructures", "hashmap")
-        vcsUrl = "https://github.com/anti-social/persistent-hashmap"
-        version(closureOf<BintrayExtension.VersionConfig> {
-            name = project.version.toString()
-            released = Date().toString()
-            vcsTag = tag
-        })
-        publish = true
-        dryRun = hasProperty("bintrayDryRun")
-    })
 }
