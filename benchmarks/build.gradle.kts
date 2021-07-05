@@ -1,8 +1,3 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-}
 repositories {
     mavenCentral()
 }
@@ -10,7 +5,7 @@ repositories {
 plugins {
     java
     kotlin("jvm")
-    id("me.champeau.gradle.jmh") version "0.5.2"
+    id("me.champeau.jmh") version "0.6.5"
 }
 
 dependencies {
@@ -22,13 +17,13 @@ dependencies {
 
 jmh {
     System.getProperty("jmh.include")?.let {
-        include = it.split(',')
+        includes.set(it.split(','))
     }
 
-    jvmArgs = listOf("-Dproject.dir=${rootDir}")
+    jvmArgs.set(listOf("-Dproject.dir=${rootDir}"))
 
-    warmupIterations = 1
-    fork = 1
-    iterations = 4
-    timeOnIteration = "1s"
+    warmupIterations.set(1)
+    fork.set(1)
+    iterations.set(4)
+    timeOnIteration.set("1s")
 }
