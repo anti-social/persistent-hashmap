@@ -14,8 +14,10 @@ buildscript {
 plugins {
     java
     `maven-publish`
-    kotlin("jvm") version "1.5.20"
-    kotlin("kapt") version "1.5.20"
+    id("io.github.gradle-nexus.publish-plugin")
+    signing
+    kotlin("jvm")
+    kotlin("kapt")
     id("org.ajoberstar.grgit") version "4.1.0"
 }
 
@@ -74,14 +76,14 @@ kapt {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("mavenJar") {
-            groupId = "company.evo"
-            artifactId = "persistent-hashmap"
-            version = project.version.toString()
+signing {
+    sign(publishing.publications)
+}
 
-            from(components["java"])
-        }
+extra["projectUrl"] = uri("https://github.com/anti-social/persistent-hashmap")
+configureJvmPublishing("persistent-hashmap", "Persistent concurrent hashmap implementation")
+nexusPublishing {
+    repositories {
+        configureSonatypeRepository(project)
     }
 }
