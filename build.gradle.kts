@@ -34,12 +34,11 @@ version = tag.trimStart('v')
 
 repositories {
     mavenCentral()
-    maven("https://dl.bintray.com/devexperts/Maven/")
 }
 
 dependencies {
     val kotlintestVersion = "3.1.11"
-    val lincheckVersion = "2.0"
+    val lincheckVersion = "2.14.1"
 
     implementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
@@ -50,7 +49,7 @@ dependencies {
     testImplementation("io.kotlintest", "kotlintest-core", kotlintestVersion)
     testImplementation("io.kotlintest", "kotlintest-assertions", kotlintestVersion)
     testImplementation("io.kotlintest", "kotlintest-runner-junit5", kotlintestVersion)
-    testImplementation("com.devexperts.lincheck", "lincheck", lincheckVersion)
+    testImplementation("org.jetbrains.kotlinx", "lincheck", lincheckVersion)
     testImplementation("commons-io", "commons-io", "2.6")
 }
 

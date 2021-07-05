@@ -1,11 +1,12 @@
 package company.evo.persistent.hashmap.straight
 
-import com.devexperts.dxlab.lincheck.LinChecker
-import com.devexperts.dxlab.lincheck.annotations.*
-import com.devexperts.dxlab.lincheck.paramgen.IntGen
-import com.devexperts.dxlab.lincheck.strategy.stress.StressOptions
-
 import io.kotlintest.specs.FunSpec
+
+import org.jetbrains.kotlinx.lincheck.LinChecker
+import org.jetbrains.kotlinx.lincheck.annotations.Operation
+import org.jetbrains.kotlinx.lincheck.annotations.Param
+import org.jetbrains.kotlinx.lincheck.paramgen.IntGen
+import org.jetbrains.kotlinx.lincheck.strategy.stress.StressOptions
 
 const val LIN_TEST_MULTIPLIER = 3
 
