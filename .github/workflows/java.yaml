@@ -1,0 +1,38 @@
+name: Java CI
+
+on: [push]
+
+env:
+  GRADLE_ARGS: "--info --stacktrace"
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up JDK
+      uses: actions/setup-java@v1
+      with:
+        java-version: 16
+
+    - name: Cache gradle wrapper
+      uses: actions/cache@v2
+      with:
+        path: ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: ${{ runner.os }}-gradle-wrapper
+
+    - name: Cache Gradle packages
+      uses: actions/cache@v2
+      with:
+        path: ~/.gradle/caches
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', 'buildSrc') }}
+        restore-keys: ${{ runner.os }}-gradle
+
+    - name: Assemble and run tests
+      run: |
+        set -eux
+        ./gradlew assemble $GRADLE_ARGS
+        ./gradlew check $GRADLE_ARGS
+        ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
