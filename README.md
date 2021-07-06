@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/anti-social/persistent-hashmap.svg?branch=master)](https://travis-ci.org/anti-social/persistent-hashmap)
+[![Java CI](https://github.com/anti-social/persistent-hashmap/actions/workflows/java.yaml/badge.svg)](https://github.com/anti-social/persistent-hashmap/actions/workflows/java.yaml)
 
 # Persistent hashmap
 
