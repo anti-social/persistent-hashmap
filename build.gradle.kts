@@ -27,7 +27,7 @@ apply {
 
 val tag = grgit.describe(mapOf("tags" to true, "match" to listOf("v*"))) ?: "v0.0.0"
 
-group = "dev.evo"
+group = "dev.evo.persistent"
 version = tag.trimStart('v')
 
 repositories {
