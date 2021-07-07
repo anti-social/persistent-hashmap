@@ -58,38 +58,30 @@ interface MutableIOBuffer : IOBuffer {
 open class UnsafeBuffer(protected val buffer: ByteBuffer) : IOBuffer {
     companion object {
         @JvmStatic
-        protected val UNSAFE: Unsafe
+        protected val UNSAFE: Unsafe = AccessController.doPrivileged(PrivilegedExceptionAction {
+            val theUnsafeField = Unsafe::class.java.getDeclaredField("theUnsafe")
+            theUnsafeField.setAccessible(true)
+            theUnsafeField.get(null) as Unsafe
+        })
+
         @JvmStatic
-        protected val ARRAY_BASE_OFFSET: Long
+        protected val ARRAY_BASE_OFFSET: Long = UNSAFE.arrayBaseOffset(ByteArray::class.java).toLong()
 
-        private val BYTE_BUFFER_ADDRESS_FIELD_OFFSET: Long
-        private val BYTE_BUFFER_OFFSET_FIELD_OFFSET: Long
-        private val BYTE_BUFFER_HB_FIELD_OFFSET: Long
-
-        init {
-            UNSAFE = AccessController.doPrivileged(PrivilegedExceptionAction {
-                val theUnsafeField = Unsafe::class.java.getDeclaredField("theUnsafe")
-                theUnsafeField.setAccessible(true)
-                theUnsafeField.get(null) as Unsafe
-            })
-            ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(ByteArray::class.java).toLong()
-
-            BYTE_BUFFER_ADDRESS_FIELD_OFFSET = AccessController.doPrivileged(PrivilegedExceptionAction {
-                UNSAFE.objectFieldOffset(
-                        Buffer::class.java.getDeclaredField("address")
-                )
-            })
-            BYTE_BUFFER_OFFSET_FIELD_OFFSET = AccessController.doPrivileged(PrivilegedExceptionAction {
-                UNSAFE.objectFieldOffset(
-                        ByteBuffer::class.java.getDeclaredField("offset")
-                )
-            })
-            BYTE_BUFFER_HB_FIELD_OFFSET = AccessController.doPrivileged(PrivilegedExceptionAction {
-                UNSAFE.objectFieldOffset(
-                        ByteBuffer::class.java.getDeclaredField("hb")
-                )
-            })
-        }
+        private val BYTE_BUFFER_ADDRESS_FIELD_OFFSET: Long = AccessController.doPrivileged(PrivilegedExceptionAction {
+            UNSAFE.objectFieldOffset(
+                Buffer::class.java.getDeclaredField("address")
+            )
+        })
+        private val BYTE_BUFFER_OFFSET_FIELD_OFFSET: Long = AccessController.doPrivileged(PrivilegedExceptionAction {
+            UNSAFE.objectFieldOffset(
+                ByteBuffer::class.java.getDeclaredField("offset")
+            )
+        })
+        private val BYTE_BUFFER_HB_FIELD_OFFSET: Long = AccessController.doPrivileged(PrivilegedExceptionAction {
+            UNSAFE.objectFieldOffset(
+                ByteBuffer::class.java.getDeclaredField("hb")
+            )
+        })
 
         private fun getDirectArrayAddress(buffer: ByteBuffer): Long {
             return UNSAFE.getLong(buffer, BYTE_BUFFER_ADDRESS_FIELD_OFFSET)
