@@ -7,7 +7,7 @@ buildscript {
     }
     dependencies {
         // Comment kapt plugin before running jcstress tests
-        classpath("com.github.erizo.gradle:jcstress-gradle-plugin:0.8.6")
+        classpath("io.github.reyerizo.gradle:jcstress-gradle-plugin:0.8.11")
     }
 }
 
