@@ -278,6 +278,7 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
             throw IllegalArgumentException("Map have already been committed")
         }
         dir.rename(map.name, getHashmapFilename(map.version))
+        map.flush()
         dir.writeVersion(map.version)
         dir.deleteFile(getHashmapFilename(curVersion))
     }

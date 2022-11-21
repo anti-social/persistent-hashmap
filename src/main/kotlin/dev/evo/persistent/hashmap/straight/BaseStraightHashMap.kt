@@ -33,6 +33,7 @@ interface StraightHashMapRO : AutoCloseable {
 interface StraightHashMap : StraightHashMapRO {
     fun storeBookmark(ix: Int, value: Long)
     fun storeAllBookmarks(values: LongArray)
+    fun flush()
 }
 
 interface StraightHashMapType<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> {

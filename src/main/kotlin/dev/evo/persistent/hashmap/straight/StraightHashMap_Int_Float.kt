@@ -76,7 +76,6 @@ interface StraightHashMapIterator_Int_Float {
 interface StraightHashMap_Int_Float : StraightHashMapRO_Int_Float, StraightHashMap {
     fun put(key: K, value: V): PutResult
     fun remove(key: K): Boolean
-    fun flush()
     fun iterator(): StraightHashMapIterator_Int_Float
 }
 
