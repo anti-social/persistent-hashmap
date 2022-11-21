@@ -169,7 +169,7 @@ class HashMapProcessor : AbstractProcessor() {
         }
     }
 
-    private fun getTypeFileName(type: String) = "${type.toLowerCase()}.kt"
+    private fun getTypeFileName(type: String) = "${type.lowercase()}.kt"
 
     private fun getTypeDir(dir: Path, type: String): Path {
         return dir.resolve(type)
