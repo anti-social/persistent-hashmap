@@ -126,6 +126,26 @@ class StraightHashMapTests : StringSpec() {
             }
         }
 
+        "int float: tombstones trigger overflow" {
+            createMap_Int_Float(5, Dummy32).use { map ->
+                map.capacity shouldBe 7
+
+                map.put(0, 1.0F) shouldBe PutResult.OK
+                map.put(1, 1.0F) shouldBe PutResult.OK
+                map.put(2, 1.0F) shouldBe PutResult.OK
+                map.put(3, 1.0F) shouldBe PutResult.OK
+                map.put(4, 1.0F) shouldBe PutResult.OK
+                map.remove(1) shouldBe true
+                map.remove(2) shouldBe true
+                map.remove(3) shouldBe true
+
+                map.size() shouldBe 2
+                map.tombstones() shouldBe 3
+
+                map.put(5, 1.0F) shouldBe PutResult.OVERFLOW
+            }
+        }
+
         "int float: put and remove a little random entries, then get them all".config(invocations = 100) {
             testRandomPutRemove_Int_Float(12, 17)
         }

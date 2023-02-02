@@ -346,7 +346,7 @@ class StraightHashMapImpl_Int_Float(
                     if (dist > maxDistance) {
                         return PutResult.OVERFLOW
                     }
-                    if (size() >= header.maxEntries) {
+                    if (size() + tombstones() >= header.maxEntries) {
                         return PutResult.OVERFLOW
                     }
                     if (tombstoneOffset < 0) {
