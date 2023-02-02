@@ -3,7 +3,7 @@ name: Java CI
 on: [push]
 
 env:
-  GRADLE_ARGS: "--info --stacktrace"
+  GRADLE_ARGS: "--info"
 
 jobs:
   build-and-publish:
@@ -34,7 +34,7 @@ jobs:
       run: |
         set -eux
         ./gradlew assemble $GRADLE_ARGS
-        ./gradlew check $GRADLE_ARGS
+        ./gradlew check -PshopPassedTests $GRADLE_ARGS
         ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
 
     - name: Prepare publishing

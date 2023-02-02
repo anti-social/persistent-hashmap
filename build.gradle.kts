@@ -1,5 +1,7 @@
 import com.github.erizo.gradle.JcstressPluginExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 buildscript {
     repositories {
@@ -68,6 +70,16 @@ val test by tasks.getting(Test::class) {
     }
     useJUnitPlatform()
     outputs.upToDateWhen { false }
+
+    testLogging {
+        events = mutableSetOf<TestLogEvent>().apply {
+            add(TestLogEvent.FAILED)
+            if (project.hasProperty("showPassedTests")) {
+                add(TestLogEvent.PASSED)
+            }
+        }
+        exceptionFormat = TestExceptionFormat.FULL
+    }
 }
 
 configure<JcstressPluginExtension> {
