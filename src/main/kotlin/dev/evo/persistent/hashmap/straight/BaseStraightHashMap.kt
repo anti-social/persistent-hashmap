@@ -184,7 +184,7 @@ class Header<out H: Hasher>(
             val maxDistance = toPositiveIntOrFail(buffer.readLong(MAX_DISTANCE_OFFSET), "maxDistance")
                     .let { maxDist ->
                         if (maxDist <= 0) {
-                            Int.MAX_VALUE
+                            maxEntries
                         } else {
                             maxDist
                         }
