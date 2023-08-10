@@ -41,7 +41,7 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
     private val lock = ReentrantLock()
 
     @Volatile
-    private var currentFile: VersionedFile = openFile(dir)
+    private var currentFile: VersionedFile? = null
 
     companion object {
         private fun openFile(dir: VersionedDirectory): VersionedFile {
@@ -73,9 +73,17 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
 
     fun getCurrentMap(): RO {
         var curFile: VersionedFile
-        // Retain a map file
         while (true) {
-            curFile = currentFile
+            curFile = currentFile ?: lock.lock().let {
+                // Another thread could update the current file so check it again
+                currentFile ?: try {
+                    openFile(dir)
+                } finally {
+                    lock.unlock()
+                }
+            }
+            // Try to retain the map file.
+            // It might fail if other readers closed it
             if (curFile.file.retain() != null) {
                 break
             }
@@ -85,15 +93,17 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
         if (curFile.version != version) {
             if (lock.tryLock()) {
                 try {
-                    currentFile = openFile(dir)
+                    val newFile = openFile(dir)
+                    currentFile = newFile
                     // Release an old map file
                     curFile.file.release()
-                    curFile = currentFile
+                    curFile = newFile
                     // Retain a map file
                     // we just now created the map file and we are under a lock
                     // so calling retain should be always successful
                     curFile.file.retain() ?:
                             throw IllegalStateException("Somehow the file just opened has been released")
+
                 } finally {
                     lock.unlock()
                 }
@@ -105,7 +115,9 @@ class StraightHashMapROEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, 
     }
 
     override fun close() {
-        currentFile.file.release()
+        currentFile?.let { curFile ->
+            curFile.file.release()
+        }
         dir.close()
     }
 }
@@ -275,7 +287,7 @@ class StraightHashMapEnv<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO
     fun commit(map: W) {
         val curVersion = dir.readVersion()
         if (map.version <= curVersion) {
-            throw IllegalArgumentException("Map have already been committed")
+            throw IllegalArgumentException("Map has already been committed")
         }
         dir.rename(map.name, getHashmapFilename(map.version))
         map.flush()
