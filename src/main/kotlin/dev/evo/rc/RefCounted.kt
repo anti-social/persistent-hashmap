@@ -2,7 +2,7 @@ package dev.evo.rc
 
 import java.util.concurrent.atomic.AtomicLong
 
-class IllegalRefCountException : Exception()
+class IllegalRefCountException : IllegalStateException()
 
 interface RefCounted<out T> {
     fun refCount(): Long
