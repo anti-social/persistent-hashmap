@@ -37,11 +37,13 @@ repositories {
 }
 
 dependencies {
+    val slf4jVersion = "2.0.7"
     val kotestVersion = "4.6.0"
     val lincheckVersion = "2.14.1"
 
     implementation(kotlin("stdlib-jdk8"))
     implementation(kotlin("reflect"))
+    implementation("org.slf4j", "slf4j-api", slf4jVersion)
 
     compileOnly(project(":processor"))
     kapt(project(":processor"))
