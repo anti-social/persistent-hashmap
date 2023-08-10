@@ -1,5 +1,8 @@
 package dev.evo.io;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -21,8 +24,10 @@ import static java.lang.invoke.MethodType.methodType;
  * https://github.com/apache/lucene-solr/blob/releases/lucene-solr/8.0.0/lucene/core/src/java/org/apache/lucene/store/MMapDirectory.java#L339
  */
 public class BufferCleaner {
-    private Class<?> unmappableBufferClass;
-    private MethodHandle unmapper;
+    private final Logger logger = LoggerFactory.getLogger(BufferCleaner.class);
+
+    private final Class<?> unmappableBufferClass;
+    private final MethodHandle unmapper;
 
     public static BufferCleaner BUFFER_CLEANER;
     public static String UNMAP_NOT_SUPPORTED_REASON;
@@ -134,6 +139,7 @@ public class BufferCleaner {
         }
         final Throwable error = AccessController.doPrivileged((PrivilegedAction<Throwable>) () -> {
             try {
+                logger.debug("Unmapping a buffer: " + buffer.toString());
                 unmapper.invokeExact(buffer);
                 return null;
             } catch (Throwable t) {
