@@ -58,6 +58,10 @@ java {
     sourceCompatibility = JavaVersion.VERSION_11
 }
 
+tasks.withType<KotlinCompile> {
+    kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+}
+
 val test by tasks.getting(Test::class) {
     properties["seed"]?.let {
         systemProperties["test.random.seed"] = it
