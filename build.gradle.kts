@@ -21,6 +21,7 @@ plugins {
     kotlin("jvm")
     kotlin("kapt")
     id("org.ajoberstar.grgit") version "4.1.1"
+    application
 }
 
 apply {
@@ -60,6 +61,10 @@ java {
 
 tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+}
+
+application {
+    mainClass.set("dev.evo.persistent.hashmap.MainKt")
 }
 
 val test by tasks.getting(Test::class) {

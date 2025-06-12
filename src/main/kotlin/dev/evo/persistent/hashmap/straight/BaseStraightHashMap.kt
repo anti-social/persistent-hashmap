@@ -18,16 +18,26 @@ enum class PutResult {
     OK, OVERFLOW
 }
 
+data class StraightHashMapStat(
+    val maxDist: Int,
+    val maxContinuousBlockLength: Int
+)
+
 interface StraightHashMapRO : AutoCloseable {
     val version: Long
     val name: String
+    val header: Header
     val maxEntries: Int
     val maxDistance: Int
     val capacity: Int
+
     fun size(): Int
+    fun tombstones(): Int
 
     fun loadBookmark(ix: Int): Long
     fun loadAllBookmarks(): LongArray
+
+    fun stat(): StraightHashMapStat
 }
 
 interface StraightHashMap : StraightHashMapRO {
@@ -36,11 +46,11 @@ interface StraightHashMap : StraightHashMapRO {
     fun flush()
 }
 
-interface StraightHashMapType<P: HasherProvider<H>, H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> {
+interface StraightHashMapType<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> {
     val bucketLayout: BucketLayout
     val keySerializer: Serializer
     val valueSerializer: Serializer
-    val hasherProvider: HasherProvider<H>
+    val hasherProvider: HasherProvider
     fun createWritable(
             version: Long,
             file: RefCounted<MappedFile<MutableIOBuffer>>
@@ -121,14 +131,13 @@ data class MapInfo(
         header.dump(buffer)
     }
 }
-
-class Header<out H: Hasher>(
+class Header(
         val capacity: Int,
         val maxEntries: Int,
         val maxDistance: Int,
         val keySerializer: Serializer,
         val valueSerializer: Serializer,
-        val hasher: H
+        val hasher: Hasher
 ) {
     companion object {
         val MAGIC = "SPHT\r\n\r\n".toByteArray()
@@ -150,9 +159,7 @@ class Header<out H: Hasher>(
 
         const val NUM_BOOKMARKS = 32
 
-        inline fun <K, V, reified H: Hasher> load(
-                buffer: IOBuffer, keyClazz: Class<K>, valueClazz: Class<V>
-        ): Header<H> {
+        fun load(buffer: IOBuffer): Header {
             val magic = ByteArray(MAGIC.size)
             buffer.readBytes(0, magic)
             if (!magic.contentEquals(MAGIC)) {
@@ -162,23 +169,9 @@ class Header<out H: Hasher>(
                 )
             }
             val flags = buffer.readLong(FLAGS_OFFSET)
-            val keySerializer = Serializer.getForClass(keyClazz)
-                    .also {
-                        val serial = getKeySerial(flags)
-                        assert(serial == it.serial) {
-                            "Mismatch key type serial: expected ${it.serial} but was $serial"
-                        }
-                    }
-            val valueSerializer = Serializer.getForClass(valueClazz)
-                    .also {
-                        val serial = getValueSerial(flags)
-                        assert(serial == it.serial) {
-                            "Mismatch value type serial: expected ${it.serial} but was $serial"
-                        }
-                    }
-            val hasher = HasherProvider.getHashProvider<K, H>(keyClazz)
-                    .getHasher(getHasherSerial(flags)) as? H
-                    ?: throw InvalidHashtableException("Mismatched hasher for a key type")
+            val keySerializer = Serializer.getBySerial(getKeySerial(flags))
+            val valueSerializer = Serializer.getBySerial(getValueSerial(flags))
+            val hasher = HasherProvider.getHashProvider(keySerializer.serial).getHasher(getHasherSerial(flags))
             val capacity = toPositiveIntOrFail(buffer.readLong(CAPACITY_OFFSET), "capacity")
             val maxEntries = toPositiveIntOrFail(buffer.readLong(MAX_ENTRIES_OFFSET), "initialEntries")
             val maxDistance = toPositiveIntOrFail(buffer.readLong(MAX_DISTANCE_OFFSET), "maxDistance")

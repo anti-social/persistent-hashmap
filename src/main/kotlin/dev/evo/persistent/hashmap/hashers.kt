@@ -18,23 +18,22 @@ interface Hasher_Long : Hasher {
     fun hash(v: Long): Int
 }
 
-interface HasherProvider<out H: Hasher> {
+interface HasherProvider {
     companion object {
-        @Suppress("UNCHECKED_CAST")
-        fun <K, H: Hasher> getHashProvider(clazz: Class<K>): HasherProvider<H> = when(clazz) {
-            Int::class.javaPrimitiveType -> HasherProvider_Int
-            Long::class.javaPrimitiveType -> HasherProvider_Long
+        fun getHashProvider(keySerial: Long): HasherProvider = when(keySerial) {
+            Serializer_Int.serial -> HasherProvider_Int
+            Serializer_Long.serial-> HasherProvider_Long
             else -> throw IllegalArgumentException(
-                    "Unsupported primitive type: $clazz"
+                    "Unsupported key serial: $keySerial"
             )
-        } as HasherProvider<H>
+        }
     }
 
     val defaultHasherSerial: Long
     fun getHasher(serial: Long): Hasher
 }
 
-object HasherProvider_Int : HasherProvider<Hasher_Int> {
+object HasherProvider_Int : HasherProvider {
     override val defaultHasherSerial = Hash32.serial
     override fun getHasher(serial: Long): Hasher = when (serial) {
         Hash32.serial -> Hash32
@@ -49,7 +48,7 @@ object HasherProvider_Int : HasherProvider<Hasher_Int> {
     }
 }
 
-object HasherProvider_Long : HasherProvider<Hasher_Long> {
+object HasherProvider_Long : HasherProvider {
     override val defaultHasherSerial = Hash64.serial
     override fun getHasher(serial: Long) = when (serial) {
         Hash64.serial -> Hash64

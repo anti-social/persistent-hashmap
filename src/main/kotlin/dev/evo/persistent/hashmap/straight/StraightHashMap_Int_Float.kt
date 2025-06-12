@@ -4,8 +4,6 @@ import dev.evo.io.IOBuffer
 import dev.evo.io.MutableIOBuffer
 import dev.evo.persistent.MappedFile
 import dev.evo.persistent.hashmap.BucketLayout
-import dev.evo.persistent.hashmap.HasherProvider_Int
-import dev.evo.persistent.hashmap.Hasher_Int
 import dev.evo.persistent.hashmap.PAGE_SIZE
 import dev.evo.persistent.hashmap.straight.keyTypes.Int.*
 import dev.evo.persistent.hashmap.straight.valueTypes.Float.*
@@ -13,17 +11,17 @@ import dev.evo.processor.KeyValueTemplate
 import dev.evo.rc.RefCounted
 
 typealias StraightHashMapEnv_Int_Float = StraightHashMapEnv<
-    HasherProvider_Int, Hasher_Int, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
+    Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
 >
 
 object StraightHashMapType_Int_Float :
     StraightHashMapType<
-        HasherProvider_K, Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
+        Hasher_K, StraightHashMap_Int_Float, StraightHashMapRO_Int_Float
     >
 {
     override val hasherProvider = HasherProvider_K
-    override val keySerializer = Serializer_K()
-    override val valueSerializer = Serializer_V()
+    override val keySerializer = Serializer_K
+    override val valueSerializer = Serializer_V
     override val bucketLayout = BucketLayout(MapInfo.META_SIZE, keySerializer.size, valueSerializer.size)
 
     override fun createWritable(
@@ -56,9 +54,10 @@ object StraightHashMapType_Int_Float :
 }
 
 interface StraightHashMapRO_Int_Float : StraightHashMapRO {
+    val hasher: Hasher_K
+
     fun contains(key: K): Boolean
     fun get(key: K, defaultValue: V): V
-    fun tombstones(): Int
 
     fun dump(dumpContent: Boolean): String
 }
@@ -88,16 +87,28 @@ open class StraightHashMapROImpl_Int_Float(
     override val name = file.get().path
 
     init {
-        assert(buffer.size() % PAGE_SIZE == 0) {
+        require(buffer.size() % PAGE_SIZE == 0) {
             "Buffer length should be a multiple of $PAGE_SIZE"
         }
     }
 
     val bucketsPerPage = MapInfo.calcBucketsPerPage(StraightHashMapType_Int_Float.bucketLayout.size)
 
-    val header = Header.load<K, V, Hasher_K>(buffer, K::class.java, V::class.java)
-    // TODO: make hasher public
-    protected val hasher: Hasher_K = header.hasher
+    final override val header = Header.load(buffer)
+    final override val hasher: Hasher_K = header.hasher as Hasher_K
+
+    init {
+        require(header.keySerializer === StraightHashMapType_Int_Float.keySerializer) {
+            "Mismatched key serializer, " +
+                "expected ${StraightHashMapType_Int_Float.keySerializer::class.qualifiedName} " +
+                "but was ${header.keySerializer::class.qualifiedName}"
+        }
+        require(header.valueSerializer === StraightHashMapType_Int_Float.valueSerializer) {
+            "Mismatched value serializer, " +
+                "expected ${StraightHashMapType_Int_Float.keySerializer::class.qualifiedName} " +
+                "but was ${header.keySerializer::class.qualifiedName}"
+        }
+    }
 
     final override val maxEntries = header.maxEntries
     final override val maxDistance = header.maxDistance
@@ -136,6 +147,54 @@ open class StraightHashMapROImpl_Int_Float(
         return description
     }
 
+    override fun stat(): StraightHashMapStat {
+        var firstBlock = -1
+        var maxBlock = 0
+        var maxDist = 0
+        var curBlock = 0
+        (0 until capacity).forEach { bucketIx ->
+            val pageOffset = getPageOffset(bucketIx)
+            val bucketOffset = getBucketOffset(pageOffset, bucketIx)
+            val meta = readBucketMeta(bucketOffset)
+            if (isBucketFree(meta)) {
+                if (curBlock > maxBlock) {
+                    maxBlock = curBlock
+                }
+                if (firstBlock < 0) {
+                    firstBlock = curBlock
+                }
+                curBlock = 0
+            } else {
+                if (isBucketOccupied(meta)) {
+                    val key = readKey(bucketOffset)
+                    val elemBucketIx = hasher.hash(key) % capacity
+                    val dist = if (bucketIx >= elemBucketIx) {
+                        bucketIx - elemBucketIx
+                    } else {
+                        bucketIx + (capacity - elemBucketIx)
+                    }
+                    if (dist > maxDist) {
+                        maxDist = dist
+                    }
+                }
+                curBlock++
+            }
+        }
+        // Merge first and last blocks
+        if (curBlock > 0) {
+            if (firstBlock > 0) {
+                curBlock += firstBlock
+            }
+            if (curBlock > maxBlock) {
+                maxBlock = curBlock
+            }
+        }
+        return StraightHashMapStat(
+            maxDist = maxDist,
+            maxContinuousBlockLength = maxBlock
+        )
+    }
+
     protected fun isBucketFree(meta: Int) = (meta and MapInfo.META_TAG_MASK) == 0
 
     protected fun isBucketOccupied(meta: Int) = (meta and MapInfo.META_OCCUPIED) != 0
@@ -168,11 +227,11 @@ open class StraightHashMapROImpl_Int_Float(
     }
 
     protected fun readSize(): Int {
-        return buffer.readInt(Header.SIZE_OFFSET)
+        return buffer.readIntVolatile(Header.SIZE_OFFSET)
     }
 
     protected fun readTombstones(): Int {
-        return buffer.readInt(Header.TOMBSTONES_OFFSET)
+        return buffer.readIntVolatile(Header.TOMBSTONES_OFFSET)
     }
 
     protected fun readBucketMeta(bucketOffset: Int): Int {

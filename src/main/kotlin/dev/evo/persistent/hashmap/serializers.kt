@@ -8,17 +8,18 @@ interface Serializer {
     val size: Int
 
     companion object {
-        fun <T> getForClass(clazz: Class<T>): Serializer = when (clazz) {
-            Int::class.javaPrimitiveType -> Serializer_Int()
-            Long::class.javaPrimitiveType -> Serializer_Long()
-            Float::class.javaPrimitiveType -> Serializer_Float()
-            Double::class.javaPrimitiveType -> Serializer_Double()
-            else -> throw IllegalArgumentException("Unsupported class: $clazz")
+        fun getBySerial(serial: Long): Serializer = when (serial) {
+            Serializer_Short.serial -> Serializer_Short
+            Serializer_Int.serial -> Serializer_Int
+            Serializer_Long.serial -> Serializer_Long
+            Serializer_Float.serial -> Serializer_Float
+            Serializer_Double.serial -> Serializer_Double
+            else -> throw IllegalArgumentException("Unsupported serializer serial: $serial")
         }
     }
 }
 
-class Serializer_Short : Serializer {
+object Serializer_Short : Serializer {
     override val serial = 1L
     override val size = 2
     fun read(buf: IOBuffer, offset: Int) = buf.readShort(offset)
@@ -27,7 +28,7 @@ class Serializer_Short : Serializer {
     }
 }
 
-class Serializer_Int : Serializer {
+object Serializer_Int : Serializer {
     override val serial = 2L
     override val size = 4
     fun read(buf: IOBuffer, offset: Int) = buf.readInt(offset)
@@ -36,7 +37,7 @@ class Serializer_Int : Serializer {
     }
 }
 
-class Serializer_Long : Serializer {
+object Serializer_Long : Serializer {
     override val serial = 3L
     override val size = 8
     fun read(buf: IOBuffer, offset: Int) = buf.readLong(offset)
@@ -45,7 +46,7 @@ class Serializer_Long : Serializer {
     }
 }
 
-class Serializer_Float : Serializer {
+object Serializer_Float : Serializer {
     override val serial = 4L
     override val size = 4
     fun read(buf: IOBuffer, offset: Int) = buf.readFloat(offset)
@@ -54,7 +55,7 @@ class Serializer_Float : Serializer {
     }
 }
 
-class Serializer_Double : Serializer {
+object Serializer_Double : Serializer {
     override val serial = 5L
     override val size = 8
     fun read(buf: IOBuffer, offset: Int) = buf.readDouble(offset)
