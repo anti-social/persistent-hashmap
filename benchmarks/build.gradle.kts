@@ -9,7 +9,6 @@ plugins {
 }
 
 dependencies {
-    // jmh("org.openjdk.jmh", "jmh-core", "1.20")
     jmh(project(":"))
     jmh(kotlin("stdlib-jdk8"))
     jmh("net.sf.trove4j:core:3.1.0")
@@ -31,12 +30,11 @@ jmh {
                     e.substringBefore('=') to objects.listProperty<String>().value(e.substringAfter('=').split(","))
                 }
         )
-        println(benchmarkParameters.get())
     }
 
     jvmArgs.set(listOf("-Dproject.dir=${rootDir}"))
 
-    warmupIterations.set(1)
+    warmupIterations.set(2)
     fork.set(1)
     iterations.set(4)
     timeOnIteration.set("1s")
