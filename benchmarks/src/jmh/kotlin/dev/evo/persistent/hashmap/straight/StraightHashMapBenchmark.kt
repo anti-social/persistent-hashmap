@@ -69,6 +69,8 @@ open class StraightHashMapBenchmark {
             println()
             println("======== Map Info =========")
             println(map.toString())
+            println("Load factor: ${(map.size() + map.tombstones()) * 100 / map.capacity}%")
+            println("Max distance: ${map.maxDist()}")
             println("===========================")
 
             this.map = map
@@ -105,8 +107,7 @@ open class StraightHashMapBenchmark {
             println("======== Map Info =========")
             println(map.toString())
             println("Load factor: ${(map.size() + map.tombstones()) * 100 / map.capacity}%")
-            val mapStat = map.stat()
-            println("Max distance: ${mapStat.maxDist}")
+            println("Max distance: ${map.maxDist()}")
             println("===========================")
 
             this.map = map

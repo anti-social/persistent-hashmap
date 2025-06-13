@@ -147,52 +147,28 @@ open class StraightHashMapROImpl_Int_Float(
         return description
     }
 
-    override fun stat(): StraightHashMapStat {
-        var firstBlock = -1
-        var maxBlock = 0
+    override fun maxDist(): Int {
         var maxDist = 0
-        var curBlock = 0
         (0 until capacity).forEach { bucketIx ->
             val pageOffset = getPageOffset(bucketIx)
             val bucketOffset = getBucketOffset(pageOffset, bucketIx)
             val meta = readBucketMeta(bucketOffset)
-            if (isBucketFree(meta)) {
-                if (curBlock > maxBlock) {
-                    maxBlock = curBlock
+            if (isBucketOccupied(meta)) {
+                val key = readKey(bucketOffset)
+                var elemDist = -1
+                find(
+                   key,
+                   found = { _, _, _, dist ->
+                       elemDist = dist
+                   },
+                   notFound = { _, _, _, _, _ -> }
+                )
+                if (elemDist > maxDist) {
+                    maxDist = elemDist
                 }
-                if (firstBlock < 0) {
-                    firstBlock = curBlock
-                }
-                curBlock = 0
-            } else {
-                if (isBucketOccupied(meta)) {
-                    val key = readKey(bucketOffset)
-                    val elemBucketIx = hasher.hash(key) % capacity
-                    val dist = if (bucketIx >= elemBucketIx) {
-                        bucketIx - elemBucketIx
-                    } else {
-                        bucketIx + (capacity - elemBucketIx)
-                    }
-                    if (dist > maxDist) {
-                        maxDist = dist
-                    }
-                }
-                curBlock++
             }
         }
-        // Merge first and last blocks
-        if (curBlock > 0) {
-            if (firstBlock > 0) {
-                curBlock += firstBlock
-            }
-            if (curBlock > maxBlock) {
-                maxBlock = curBlock
-            }
-        }
-        return StraightHashMapStat(
-            maxDist = maxDist,
-            maxContinuousBlockLength = maxBlock
-        )
+        return maxDist
     }
 
     protected fun isBucketFree(meta: Int) = (meta and MapInfo.META_TAG_MASK) == 0

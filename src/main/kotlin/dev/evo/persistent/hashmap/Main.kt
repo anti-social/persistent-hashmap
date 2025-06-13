@@ -58,9 +58,7 @@ fun main(args: Array<String>) {
             println("Tombstones: ${map.tombstones()}")
             println("Total: ${map.size() + map.tombstones()}")
             println("Load factor: ${(map.size().toLong() + map.tombstones().toLong()) * 100 / map.capacity.toLong()}%")
-            val stat = map.stat()
-            println("Max continuous block: ${stat.maxContinuousBlockLength}")
-            println("Max element distance: ${stat.maxDist}")
+            println("Max element distance: ${map.maxDist()}")
         }
     }
 }

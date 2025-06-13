@@ -15,6 +15,10 @@ dependencies {
     jmh("net.sf.trove4j:core:3.1.0")
 }
 
+tasks.getByName("jmh") {
+    outputs.upToDateWhen { false }
+}
+
 jmh {
     System.getProperty("jmh.include")?.let {
         includes.set(it.split(','))

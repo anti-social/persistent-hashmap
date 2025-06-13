@@ -18,11 +18,6 @@ enum class PutResult {
     OK, OVERFLOW
 }
 
-data class StraightHashMapStat(
-    val maxDist: Int,
-    val maxContinuousBlockLength: Int
-)
-
 interface StraightHashMapRO : AutoCloseable {
     val version: Long
     val name: String
@@ -37,7 +32,7 @@ interface StraightHashMapRO : AutoCloseable {
     fun loadBookmark(ix: Int): Long
     fun loadAllBookmarks(): LongArray
 
-    fun stat(): StraightHashMapStat
+    fun maxDist(): Int
 }
 
 interface StraightHashMap : StraightHashMapRO {
