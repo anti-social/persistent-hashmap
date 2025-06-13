@@ -119,7 +119,7 @@ open class StraightHashMapBenchmark {
 
     @Benchmark
     @Threads(1)
-    open fun benchmark_hasher(state: StraightHashMapHasherState, blackhole: Blackhole) {
+    open fun benchmark_reader(state: StraightHashMapHasherState, blackhole: Blackhole) {
         val map = state.map!!
         for (k in state.dataSet.lookupKeys) {
             blackhole.consume(

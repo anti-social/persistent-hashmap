@@ -5,7 +5,7 @@ repositories {
 plugins {
     java
     kotlin("jvm")
-    id("me.champeau.jmh") version "0.6.5"
+    id("me.champeau.jmh") version "0.6.6"
 }
 
 dependencies {
@@ -18,6 +18,16 @@ dependencies {
 jmh {
     System.getProperty("jmh.include")?.let {
         includes.set(it.split(','))
+    }
+
+    System.getProperty("jmh.params")?.let {
+        benchmarkParameters.set(
+            it.split(':')
+                .associate { e ->
+                    e.substringBefore('=') to objects.listProperty<String>().value(e.substringAfter('=').split(","))
+                }
+        )
+        println(benchmarkParameters.get())
     }
 
     jvmArgs.set(listOf("-Dproject.dir=${rootDir}"))

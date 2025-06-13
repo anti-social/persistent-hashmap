@@ -1,8 +1,6 @@
-package dev.evo.persistent.hashmap.trove
+package dev.evo.persistent.hashmap.standard
 
 import dev.evo.persistent.hashmap.BaseState
-
-import gnu.trove.map.hash.TIntFloatHashMap
 
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
@@ -13,10 +11,10 @@ import org.openjdk.jmh.annotations.State
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
-open class TroveHashMapBenchmark {
+open class StdHashMapBenchmark {
     @State(Scope.Benchmark)
-    open class TroveHashMapState : BaseState() {
-        var map: TIntFloatHashMap = TIntFloatHashMap()
+    open class StdHashMapState : BaseState() {
+        var map = HashMap<Int, Float>()
 
         @Param(
             "RND",
@@ -28,12 +26,11 @@ open class TroveHashMapBenchmark {
 
         @Setup(Level.Trial)
         fun setUpMap() {
-            val map = TIntFloatHashMap(dataSet.keys.size, 0.5F, 0, 0.0F)
+            val map = HashMap<Int, Float>(dataSet.keys.size, 0.5F)
             initMap { k, v -> map.put(k, v) }
             println()
             println("======== Map Info =========")
-            println("Capacity: ${map.capacity()}")
-            println("Size: ${map.size()}")
+            println("Size: ${map.size}")
             println("===========================")
 
             this.map = map
@@ -42,7 +39,7 @@ open class TroveHashMapBenchmark {
 
     @Benchmark
     @Threads(1)
-    open fun benchmark_reader(state: TroveHashMapState, blackhole: Blackhole) {
+    open fun benchmark_reader(state: StdHashMapState, blackhole: Blackhole) {
         for (k in state.dataSet.lookupKeys) {
             blackhole.consume(
                 state.map.get(k)
