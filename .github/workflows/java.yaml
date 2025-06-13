@@ -14,7 +14,8 @@ jobs:
     - name: Set up JDK
       uses: actions/setup-java@v2
       with:
-        java-version: 15
+        distribution: temurin
+        java-version: 17
 
     - name: Cache gradle wrapper
       uses: actions/cache@v4
