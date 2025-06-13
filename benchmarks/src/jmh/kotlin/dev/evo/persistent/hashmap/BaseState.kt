@@ -35,13 +35,7 @@ abstract class BaseState {
 
     lateinit var dataSet: HashMapBenchmarkDataSet
 
-    @Param(
-        "RND",
-        "SEQ",
-        "MISSING_RND",
-        "MISSING_SEQ"
-    )
-    protected var lookupMode: LookupMode = LookupMode.RND
+    abstract var lookupMode: LookupMode
 
     @Setup(Level.Trial)
     fun setUpDataSet() {
@@ -104,17 +98,18 @@ abstract class BaseState {
             private fun loadRandom(spec: String, lookupMode: LookupMode): HashMapBenchmarkDataSet {
                 val options = Options.parse(spec, listOf(OptionType.INT))
                 val numEntries = options.args[0] as Int
-                val keys = random
-                    .ints(0, MAX_KEY)
-                    .limit(numEntries.toLong())
-                    .toArray()
+                val keys = HashSet<Int>(numEntries)
+                val keysStream = random.ints().iterator()
+                while (keys.size < numEntries) {
+                    keys.add(keysStream.nextInt())
+                }
                 val values = random
                     .doubles()
                     .limit(numEntries.toLong())
                     .toArray()
                     .map { it.toFloat() }
                     .toFloatArray()
-                return HashMapBenchmarkDataSet(keys, values, lookupMode)
+                return HashMapBenchmarkDataSet(keys.toIntArray(), values, lookupMode)
             }
 
             private fun loadFile(spec: String, lookupMode: LookupMode): HashMapBenchmarkDataSet {

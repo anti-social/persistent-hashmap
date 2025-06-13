@@ -6,6 +6,7 @@ import gnu.trove.map.hash.TIntFloatHashMap
 
 import org.openjdk.jmh.annotations.Benchmark
 import org.openjdk.jmh.annotations.Level
+import org.openjdk.jmh.annotations.Param
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
@@ -16,6 +17,14 @@ open class TroveHashMapBenchmark {
     @State(Scope.Benchmark)
     open class TroveHashMapState : BaseState() {
         var map: TIntFloatHashMap = TIntFloatHashMap()
+
+        @Param(
+            "RND",
+            "SEQ",
+            "MISSING_RND",
+            "MISSING_SEQ"
+        )
+        override var lookupMode: LookupMode = LookupMode.RND
 
         @Setup(Level.Trial)
         fun setUpMap() {
