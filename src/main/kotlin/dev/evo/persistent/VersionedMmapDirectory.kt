@@ -4,6 +4,7 @@ import dev.evo.io.BufferCleaner
 import dev.evo.io.IOBuffer
 import dev.evo.io.MutableIOBuffer
 import dev.evo.io.MutableUnsafeBuffer
+import dev.evo.io.MutableMemorySegmentBuffer
 import dev.evo.rc.AtomicRefCounted
 import dev.evo.rc.RefCounted
 
@@ -16,13 +17,15 @@ import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.lang.foreign.Arena
 
 
 class VersionedMmapDirectory private constructor(
         val path: Path,
         private val versionFile: MappedFile<MutableIOBuffer>,
         private val writeLock: VersionLock? = null,
-        val created: Boolean = false
+        val created: Boolean = false,
+        private val useMemorySegments: Boolean = false,
 ) : AbstractVersionedDirectory(versionFile) {
 
     private var bufferCleaner: (MappedFile<IOBuffer>) -> Unit = {}
@@ -64,8 +67,8 @@ class VersionedMmapDirectory private constructor(
             return path.resolve(versionFilename)
         }
 
-        private fun getVersionFile(versionPath: Path, mode: Mode): MappedFile<MutableIOBuffer> {
-            val file = mmapFile(versionPath.toFile(), mode)
+        private fun getVersionFile(versionPath: Path, mode: Mode, useMemorySegments: Boolean): MappedFile<MutableIOBuffer> {
+            val file = mmapFile(versionPath.toFile(), mode, useMemorySegments)
             if (file.buffer.size() != VersionedDirectory.VERSION_LENGTH) {
                 throw CorruptedVersionFileException(
                         "Version file must have size ${VersionedDirectory.VERSION_LENGTH}"
@@ -74,12 +77,12 @@ class VersionedMmapDirectory private constructor(
             return file
         }
 
-        fun openWritable(path: Path, versionFilename: String): VersionedMmapDirectory {
+        fun openWritable(path: Path, versionFilename: String, useMemorySegments: Boolean): VersionedMmapDirectory {
             val versionPath = getVersionPath(path, versionFilename)
             val (versionFile, created) = if (!versionPath.toFile().exists()) {
-                getVersionFile(versionPath, Mode.Create(VersionedDirectory.VERSION_LENGTH)) to true
+                getVersionFile(versionPath, Mode.Create(VersionedDirectory.VERSION_LENGTH), useMemorySegments) to true
             } else {
-                getVersionFile(versionPath, Mode.OpenRW()) to false
+                getVersionFile(versionPath, Mode.OpenRW, useMemorySegments) to false
             }
             val versionLock = VersionLock(versionPath)
             return VersionedMmapDirectory(
@@ -87,35 +90,40 @@ class VersionedMmapDirectory private constructor(
             )
         }
 
-        fun openReadOnly(path: Path, versionFilename: String): VersionedMmapDirectory {
+        fun openReadOnly(path: Path, versionFilename: String, useMemorySegments: Boolean): VersionedMmapDirectory {
             val versionPath = getVersionPath(path, versionFilename)
             if (!versionPath.toFile().exists()) {
                 throw FileDoesNotExistException(versionPath)
             }
-            val versionFile = getVersionFile(versionPath, Mode.OpenRO())
+            val versionFile = getVersionFile(versionPath, Mode.OpenRO, useMemorySegments)
             return VersionedMmapDirectory(path, versionFile)
         }
 
-        private fun mmapFile(file: File, mode: Mode): MappedFile<MutableIOBuffer> {
+        private fun mmapFile(file: File, mode: Mode, useMemorySegments: Boolean): MappedFile<MutableIOBuffer> {
             return RandomAccessFile(file, mode.mode).use { f ->
                 if (mode is Mode.Create) {
                     f.setLength(mode.size.toLong())
                 }
-                val mappedBuffer = f.channel.use { channel ->
-                    channel
+                val buffer = f.channel.use { channel ->
+                    if (useMemorySegments) {
+                        val mappedSegment = channel.map(mode.mapMode, 0, channel.size(), Arena.ofShared())
+                        MutableMemorySegmentBuffer(mappedSegment)
+                    } else {
+                        val mappedBuffer = channel
                             .map(mode.mapMode, 0, channel.size())
                             .order(ByteOrder.nativeOrder())
+                        MutableUnsafeBuffer(mappedBuffer)
+                    }
                 }
-                MappedFile(file.path, MutableUnsafeBuffer(mappedBuffer))
+                MappedFile(file.path, buffer)
             }
         }
-
     }
 
     private sealed class Mode(val mode: String, val mapMode: FileChannel.MapMode) {
         class Create(val size: Int) : Mode("rw", FileChannel.MapMode.READ_WRITE)
-        class OpenRO : Mode("r", FileChannel.MapMode.READ_ONLY)
-        class OpenRW : Mode("rw", FileChannel.MapMode.READ_WRITE)
+        object OpenRO : Mode("r", FileChannel.MapMode.READ_ONLY)
+        object OpenRW : Mode("rw", FileChannel.MapMode.READ_WRITE)
     }
 
     override fun close() {
@@ -136,7 +144,7 @@ class VersionedMmapDirectory private constructor(
         if (deleteOnExit) {
             file.deleteOnExit()
         }
-        return AtomicRefCounted(mmapFile(file, Mode.Create(size)), bufferCleaner)
+        return AtomicRefCounted(mmapFile(file, Mode.Create(size), false), bufferCleaner)
     }
 
     override fun openFileWritable(name: String): RefCounted<MappedFile<MutableIOBuffer>> {
@@ -145,7 +153,7 @@ class VersionedMmapDirectory private constructor(
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException(filepath)
         }
-        return AtomicRefCounted(mmapFile(filepath.toFile(), Mode.OpenRW()), bufferCleaner)
+        return AtomicRefCounted(mmapFile(filepath.toFile(), Mode.OpenRW, false), bufferCleaner)
     }
 
     override fun openFileReadOnly(name: String): RefCounted<MappedFile<IOBuffer>> {
@@ -153,7 +161,10 @@ class VersionedMmapDirectory private constructor(
         if (!filepath.toFile().exists()) {
             throw FileDoesNotExistException(filepath)
         }
-        return AtomicRefCounted(mmapFile(filepath.toFile(), Mode.OpenRO()), bufferCleaner)
+        return AtomicRefCounted(
+            mmapFile(filepath.toFile(), Mode.OpenRO, useMemorySegments),
+            bufferCleaner
+        )
     }
 
     override fun deleteFile(name: String) {

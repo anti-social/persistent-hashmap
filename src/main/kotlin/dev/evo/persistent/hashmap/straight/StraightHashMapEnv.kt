@@ -189,8 +189,13 @@ class StraightHashMapEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> p
             this.useUnmapHack = useUnmapHack
         }
 
+        var useMemorySegments: Boolean = false
+        fun useMemorySegments(useMemorySegments: Boolean) = apply {
+            this.useMemorySegments = useMemorySegments
+        }
+
         fun open(path: Path): StraightHashMapEnv<H, W, RO> {
-            val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
+            val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME, useMemorySegments)
             dir.useUnmapHack = useUnmapHack
             return if (dir.created) {
                 create(dir)
@@ -200,7 +205,7 @@ class StraightHashMapEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> p
         }
 
         fun openReadOnly(path: Path): StraightHashMapROEnv<H, W, RO> {
-            val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
+            val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME, useMemorySegments)
             dir.useUnmapHack = useUnmapHack
             return StraightHashMapROEnv(dir, mapType)
         }

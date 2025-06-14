@@ -18,6 +18,10 @@ tasks.getByName("jmh") {
     outputs.upToDateWhen { false }
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_22
+}
+
 jmh {
     System.getProperty("jmh.include")?.let {
         includes.set(it.split(','))

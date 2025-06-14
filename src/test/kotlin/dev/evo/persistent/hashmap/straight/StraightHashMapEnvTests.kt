@@ -15,6 +15,7 @@ class StraightHashMapEnvTests : FunSpec() {
             withTempDir { tmpDir ->
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.getCurrentVersion() shouldBe 0L
@@ -45,6 +46,7 @@ class StraightHashMapEnvTests : FunSpec() {
             withTempDir {  tmpDir ->
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
@@ -98,6 +100,7 @@ class StraightHashMapEnvTests : FunSpec() {
             withTempDir { tmpDir ->
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
@@ -115,6 +118,7 @@ class StraightHashMapEnvTests : FunSpec() {
 
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
@@ -128,6 +132,7 @@ class StraightHashMapEnvTests : FunSpec() {
             withTempDir { tmpDir ->
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
@@ -179,6 +184,7 @@ class StraightHashMapEnvTests : FunSpec() {
         test("env: anonymous") {
             StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                     .useUnmapHack(true)
+                    .useMemorySegments(true)
                     .createAnonymousHeap()
                     .use { env ->
                         env.openMap()
@@ -190,6 +196,7 @@ class StraightHashMapEnvTests : FunSpec() {
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .hasher(Dummy32)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
@@ -203,6 +210,7 @@ class StraightHashMapEnvTests : FunSpec() {
                 StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
                         .hasher(Knuth32)
                         .useUnmapHack(true)
+                        .useMemorySegments(true)
                         .open(tmpDir)
                         .use { env ->
                             env.openMap().use { map ->
