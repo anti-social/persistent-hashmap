@@ -38,7 +38,7 @@ repositories {
 }
 
 dependencies {
-    val slf4jVersion = "2.0.7"
+    val slf4jVersion = "2.0.17"
     val kotestVersion = "4.6.0"
     val lincheckVersion = "2.14.1"
 
