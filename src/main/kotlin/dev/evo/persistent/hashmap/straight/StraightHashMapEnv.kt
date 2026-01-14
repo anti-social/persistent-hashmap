@@ -185,7 +185,7 @@ class StraightHashMapEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> p
             this.maxDistance = maxDist
         }
 
-        var bufferManagement: BufferManagement = BufferManagement.Unsafe(false)
+        var bufferManagement: BufferManagement = BufferManagement.MemorySegments
         fun bufferManagement(bufferManagement: BufferManagement) = apply {
             this.bufferManagement = bufferManagement
         }
