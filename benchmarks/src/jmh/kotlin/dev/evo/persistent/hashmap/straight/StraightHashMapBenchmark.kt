@@ -1,6 +1,7 @@
 package dev.evo.persistent.hashmap.straight
 
 import dev.evo.io.MutableUnsafeBuffer
+import dev.evo.io.MutableMemorySegmentBuffer
 import dev.evo.persistent.MappedFile
 import dev.evo.persistent.hashmap.BaseState
 import dev.evo.persistent.hashmap.Dummy32
@@ -19,6 +20,7 @@ import org.openjdk.jmh.annotations.State
 import org.openjdk.jmh.annotations.Threads
 import org.openjdk.jmh.infra.Blackhole
 
+import java.lang.foreign.Arena
 import java.nio.ByteBuffer
 
 open class StraightHashMapBenchmark {
@@ -41,6 +43,9 @@ open class StraightHashMapBenchmark {
         )
         override var lookupMode: LookupMode = LookupMode.RND
 
+        @Param("true", "false")
+        var useMemorySegments: Boolean = false
+
         @Setup(Level.Trial)
         fun setUpMap() {
             val mapInfo = MapInfo.calcFor(
@@ -48,7 +53,15 @@ open class StraightHashMapBenchmark {
                 0.5,
                 StraightHashMapType_Int_Float.bucketLayout.size
             )
-            val buffer = ByteBuffer.allocateDirect(mapInfo.bufferSize)
+            val buffer = if (useMemorySegments) {
+                val arena = Arena.global()
+                val segment = arena.allocate(mapInfo.bufferSize.toLong())
+                MutableMemorySegmentBuffer(segment, arena)
+            } else {
+                MutableUnsafeBuffer(
+                    ByteBuffer.allocateDirect(mapInfo.bufferSize)
+                )
+            }
             val hasher = when (hashAlgo) {
                 "hash32" -> Hash32
                 "dummy32" -> Dummy32
@@ -56,14 +69,15 @@ open class StraightHashMapBenchmark {
                 else -> throw IllegalArgumentException("Unknown hash algorithm: $hashAlgo")
             }
             mapInfo.initBuffer(
-                MutableUnsafeBuffer(buffer),
+                buffer,
                 StraightHashMapType_Int_Float.keySerializer,
                 StraightHashMapType_Int_Float.valueSerializer,
                 StraightHashMapType_Int_Float.hasherProvider.getHasher(hasher.serial)
             )
+
             val map = StraightHashMapImpl_Int_Float(
                 0L,
-                AtomicRefCounted(MappedFile("<map>", MutableUnsafeBuffer(buffer))) {}
+                AtomicRefCounted(MappedFile("<map>", buffer)) {}
             )
             initMap { k, v -> map.put(k, v) }
             println()

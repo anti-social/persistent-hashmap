@@ -1,17 +1,19 @@
 package dev.evo.persistent
 
+import dev.evo.io.BufferCleaner
 import dev.evo.io.IOBuffer
 import dev.evo.io.MutableIOBuffer
 import dev.evo.rc.RefCounted
+import org.slf4j.LoggerFactory
 
 import java.io.Closeable
 import java.nio.file.Path
 
 open class VersionedDirectoryException(
-        msg: String, cause: Exception? = null
+    msg: String, cause: Exception? = null
 ) : Exception(msg, cause)
 class WriteLockException(
-        msg: String, cause: Exception? = null
+    msg: String, cause: Exception? = null
 ) : VersionedDirectoryException(msg, cause)
 class CorruptedVersionFileException(msg: String) : VersionedDirectoryException(msg)
 class ReadOnlyException(msg: String) : VersionedDirectoryException(msg)
@@ -19,9 +21,14 @@ class FileAlreadyExistsException(path: Path) : VersionedDirectoryException("Cann
 class FileDoesNotExistException(path: Path) : VersionedDirectoryException("Cannot open $path: does not exist")
 
 data class MappedFile<out T: IOBuffer>(
-        val path: String,
-        val buffer: T
+    val path: String,
+    val buffer: T
 )
+
+sealed class BufferManagement {
+    class Unsafe(val withUnmapHack: Boolean): BufferManagement()
+    object MemorySegments: BufferManagement()
+}
 
 interface VersionedDirectory : Closeable {
     /**
@@ -78,7 +85,7 @@ interface VersionedDirectory : Closeable {
 }
 
 abstract class AbstractVersionedDirectory(
-        private val versionFile: MappedFile<MutableIOBuffer>
+    private val versionFile: MappedFile<MutableIOBuffer>
 ) : VersionedDirectory {
 
     override fun readVersion() = versionFile.buffer.readLongVolatile(0)
@@ -88,4 +95,39 @@ abstract class AbstractVersionedDirectory(
     }
 
     override fun close() {}
+}
+
+abstract class ManageableVersionedDirectory protected constructor(
+    private val versionFile: MappedFile<MutableIOBuffer>,
+    private val bufferManagement: BufferManagement,
+) : AbstractVersionedDirectory(versionFile) {
+
+    private val logger = LoggerFactory.getLogger(ManageableVersionedDirectory::class.java)
+    
+    protected var bufferCleaner: (MappedFile<IOBuffer>) -> Unit
+    init {
+        val needCleaner = when (bufferManagement) {
+            is BufferManagement.Unsafe -> {
+                if (bufferManagement.withUnmapHack) {
+                    if (BufferCleaner.BUFFER_CLEANER == null) {
+                        throw IllegalArgumentException(BufferCleaner.UNMAP_NOT_SUPPORTED_REASON)
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            BufferManagement.MemorySegments -> {
+                true
+            }
+        }
+        bufferCleaner = if (needCleaner) {
+            { file ->
+                logger.info("Cleaning file buffer: ${file.path}")
+                file.buffer.drop()
+            }
+        } else {
+            {}
+        }
+    }
 }

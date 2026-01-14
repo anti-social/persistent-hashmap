@@ -14,21 +14,21 @@ class VersionedDirectoryTest : StringSpec() {
     init {
         "one writer, several readers" {
             withTempDir {
-                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
+                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME, BufferManagement.MemorySegments).use { dir ->
                     dir.readVersion() shouldBe 0L
 
                     shouldThrow<WriteLockException> {
-                        VersionedMmapDirectory.openWritable(it, VERSION_FILENAME)
+                        VersionedMmapDirectory.openWritable(it, VERSION_FILENAME, BufferManagement.MemorySegments)
                     }
 
-                    val dirRO = VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME)
+                    val dirRO = VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME, BufferManagement.MemorySegments)
                     dirRO.readVersion() shouldBe 0L
 
                     dir.writeVersion(1L)
                     dirRO.readVersion() shouldBe 1L
                 }
 
-                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME).use { dir ->
+                VersionedMmapDirectory.openWritable(it, VERSION_FILENAME, BufferManagement.MemorySegments).use { dir ->
                     dir.readVersion() shouldBe 1L
                 }
             }
@@ -37,7 +37,7 @@ class VersionedDirectoryTest : StringSpec() {
         "read uninitialized directory" {
             withTempDir {
                 shouldThrow<FileDoesNotExistException> {
-                    VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME)
+                    VersionedMmapDirectory.openReadOnly(it, VERSION_FILENAME, BufferManagement.MemorySegments)
                 }
             }
         }
@@ -52,7 +52,7 @@ class VersionedDirectoryTest : StringSpec() {
         }
 
         "RAM direct directory" {
-            VersionedRamDirectory.createDirect().use { dir ->
+            VersionedRamDirectory.createDirect(BufferManagement.MemorySegments).use { dir ->
                 dir.readVersion() shouldBe 0L
 
                 dir.writeVersion(1L)

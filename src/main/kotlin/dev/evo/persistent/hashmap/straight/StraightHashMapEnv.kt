@@ -13,6 +13,7 @@ import dev.evo.persistent.VersionedDirectory
 import dev.evo.persistent.VersionedMmapDirectory
 import dev.evo.persistent.VersionedRamDirectory
 import dev.evo.persistent.hashmap.Hasher
+import dev.evo.persistent.BufferManagement
 import dev.evo.rc.RefCounted
 import dev.evo.rc.use
 
@@ -184,39 +185,41 @@ class StraightHashMapEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> p
             this.maxDistance = maxDist
         }
 
-        var useUnmapHack: Boolean = false
-        fun useUnmapHack(useUnmapHack: Boolean) = apply {
-            this.useUnmapHack = useUnmapHack
+        var bufferManagement: BufferManagement = BufferManagement.MemorySegments
+        fun bufferManagement(bufferManagement: BufferManagement) = apply {
+            this.bufferManagement = bufferManagement
         }
 
         fun open(path: Path): StraightHashMapEnv<H, W, RO> {
-            val dir = VersionedMmapDirectory.openWritable(path, VERSION_FILENAME)
-            dir.useUnmapHack = useUnmapHack
-            return if (dir.created) {
-                create(dir)
-            } else {
-                openWritable(dir)
+            val dir = VersionedMmapDirectory.openWritable(
+                path, VERSION_FILENAME, bufferManagement
+            )
+            if (dir.created) {
+                initialize(dir)
             }
+            return openWritable(dir)
         }
 
         fun openReadOnly(path: Path): StraightHashMapROEnv<H, W, RO> {
-            val dir = VersionedMmapDirectory.openReadOnly(path, VERSION_FILENAME)
-            dir.useUnmapHack = useUnmapHack
+            val dir = VersionedMmapDirectory.openReadOnly(
+                path, VERSION_FILENAME, bufferManagement
+            )
             return StraightHashMapROEnv(dir, mapType)
         }
 
         fun createAnonymousDirect(): StraightHashMapEnv<H, W, RO> {
-            val dir = VersionedRamDirectory.createDirect()
-            dir.useUnmapHack = useUnmapHack
-            return create(dir)
+            val dir = VersionedRamDirectory.createDirect(bufferManagement)
+            initialize(dir)
+            return openWritable(dir)
         }
 
         fun createAnonymousHeap(): StraightHashMapEnv<H, W, RO> {
             val dir = VersionedRamDirectory.createHeap()
-            return create(dir)
+            initialize(dir)
+            return openWritable(dir)
         }
 
-        private fun create(dir: VersionedDirectory): StraightHashMapEnv<H, W, RO> {
+        private fun initialize(dir: VersionedDirectory) {
             val version = dir.readVersion()
             val filename = getHashmapFilename(version)
             val mapInfo = MapInfo.calcFor(
@@ -230,7 +233,6 @@ class StraightHashMapEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO> p
                         hasher
                 )
             }
-            return StraightHashMapEnv(dir, loadFactor, mapType, hasher)
         }
 
         private fun openWritable(dir: VersionedDirectory): StraightHashMapEnv<H, W, RO> {

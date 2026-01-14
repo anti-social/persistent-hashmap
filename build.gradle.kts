@@ -1,17 +1,6 @@
-import com.github.erizo.gradle.JcstressPluginExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        // Comment kapt plugin before running jcstress tests
-        classpath("io.github.reyerizo.gradle:jcstress-gradle-plugin:0.8.15")
-    }
-}
 
 plugins {
     java
@@ -22,13 +11,14 @@ plugins {
     kotlin("kapt")
     id("org.ajoberstar.grgit") version "4.1.1"
     application
+    // id("io.github.reyerizo.gradle.jcstress") version "0.9.0"
 }
 
-apply {
-    plugin("jcstress")
+val tag = try {
+    grgit.describe(mapOf("tags" to true, "match" to listOf("v*"))) ?: "v0.0.0"
+} catch (e: Exception) {
+    "v0.0.0"
 }
-
-val tag = grgit.describe(mapOf("tags" to true, "match" to listOf("v*"))) ?: "v0.0.0"
 
 group = "dev.evo.persistent"
 version = tag.trimStart('v')
@@ -54,11 +44,9 @@ dependencies {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-}
-
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(22)
+    }
 }
 
 application {
@@ -83,13 +71,13 @@ val test by tasks.getting(Test::class) {
     }
 }
 
-configure<JcstressPluginExtension> {
-    jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.4"
-}
+// configure<JcstressPluginExtension> {
+//     jcstressDependency = "org.openjdk.jcstress:jcstress-core:0.16"
+// }
 
 kapt {
     arguments {
-        arg("kotlin.source", kotlin.sourceSets["main"].kotlin.srcDirs.first())
+        arg("kotlin.source", kotlin.sourceSets["main"].kotlin.srcDirs.first().toString())
     }
 }
 

@@ -1,5 +1,6 @@
 package dev.evo.persistent.hashmap
 
+import dev.evo.persistent.BufferManagement
 import dev.evo.persistent.VersionedMmapDirectory
 import dev.evo.persistent.hashmap.straight.StraightHashMapEnv
 import dev.evo.persistent.hashmap.straight.StraightHashMapRO
@@ -19,7 +20,9 @@ import java.nio.file.Paths
 
 fun main(args: Array<String>) {
     val hashmapDir = Paths.get(args[0])
-    val envBuilder = VersionedMmapDirectory.openReadOnly(hashmapDir, StraightHashMapEnv.VERSION_FILENAME).use { dir ->
+    val envBuilder = VersionedMmapDirectory.openReadOnly(
+        hashmapDir, StraightHashMapEnv.VERSION_FILENAME, BufferManagement.MemorySegments
+    ).use { dir ->
         val mapHeader = StraightHashMapROEnv.readMapHeader(dir)
         when (mapHeader.keySerializer) {
             Serializer_Int -> when (mapHeader.valueSerializer) {
@@ -43,7 +46,7 @@ fun main(args: Array<String>) {
             }
         }
     }
-    envBuilder.openReadOnly(hashmapDir).use { env ->
+    envBuilder.bufferManagement(BufferManagement.MemorySegments).openReadOnly(hashmapDir).use { env ->
         env.getCurrentMap().use { map ->
             val header = map.header
             println("Path: ${map.name}")

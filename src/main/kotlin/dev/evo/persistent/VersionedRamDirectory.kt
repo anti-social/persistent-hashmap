@@ -4,59 +4,55 @@ import dev.evo.io.BufferCleaner
 import dev.evo.io.IOBuffer
 import dev.evo.io.MutableIOBuffer
 import dev.evo.io.MutableUnsafeBuffer
+import dev.evo.io.MutableMemorySegmentBuffer
 import dev.evo.rc.AtomicRefCounted
 import dev.evo.rc.RefCounted
 
+import java.lang.foreign.Arena
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 
 class VersionedRamDirectory private constructor(
-        private val bufferAllocator: (Int) -> ByteBuffer,
-        private val isDirect: Boolean
-) : AbstractVersionedDirectory(
-        MappedFile(
-                "<version>",
-                MutableUnsafeBuffer(
-                        bufferAllocator(VersionedDirectory.VERSION_LENGTH)
-                )
-        )
+    private val bufferManagement: BufferManagement,
+    private val bufferAllocator: (Int) -> MutableIOBuffer,
+) : ManageableVersionedDirectory(
+        MappedFile("<version>", bufferAllocator(VersionedDirectory.VERSION_LENGTH)),
+        bufferManagement,
 ) {
-
     private val buffers = ConcurrentHashMap<String, RefCounted<MappedFile<MutableIOBuffer>>>()
-
-    private var bufferCleaner: (MutableIOBuffer) -> Unit = {}
-    var useUnmapHack = false
-        set(useUnmapHack) {
-            if (!isDirect) {
-                throw IllegalArgumentException("Only direct buffers support unmappping")
-            }
-            if (useUnmapHack && BufferCleaner.BUFFER_CLEANER == null) {
-                throw IllegalArgumentException(BufferCleaner.UNMAP_NOT_SUPPORTED_REASON)
-            }
-            field = useUnmapHack
-            bufferCleaner = { buffer ->
-                buffer.drop()
-            }
-        }
 
     companion object {
         fun createHeap(): VersionedRamDirectory {
-            return VersionedRamDirectory(ByteBuffer::allocate, false)
+            return VersionedRamDirectory(BufferManagement.Unsafe(false)) {
+                size -> MutableUnsafeBuffer(ByteBuffer.allocate(size))
+            }
         }
 
-        fun createDirect(): VersionedRamDirectory {
-            return VersionedRamDirectory(ByteBuffer::allocateDirect, true)
+        fun createDirect(bufferManagement: BufferManagement): VersionedRamDirectory {
+            val bufferAllocator: (Int) -> MutableIOBuffer = when (bufferManagement) {
+                is BufferManagement.Unsafe -> {
+                    { size -> MutableUnsafeBuffer(ByteBuffer.allocateDirect(size)) }
+                }
+                BufferManagement.MemorySegments -> {
+                    { size ->
+                        val arena = Arena.ofShared()
+                        MutableMemorySegmentBuffer(arena.allocate(size.toLong()), arena)
+                    }
+                }
+            }
+            return VersionedRamDirectory(bufferManagement, bufferAllocator) 
+            // return VersionedRamDirectory(ByteBuffer::allocateDirect)
         }
     }
 
     override fun createFile(
-            name: String, size: Int, deleteOnExit: Boolean
+        name: String, size: Int, deleteOnExit: Boolean
     ): RefCounted<MappedFile<MutableIOBuffer>> {
         if (buffers.containsKey(name)) {
             throw FileAlreadyExistsException(Paths.get(name))
         }
-        val buffer = MutableUnsafeBuffer(bufferAllocator(size))
+        val buffer = bufferAllocator(size)
         val file = AtomicRefCounted(MappedFile(name, buffer)) {}
         buffers[name] = file
         return file
@@ -74,7 +70,7 @@ class VersionedRamDirectory private constructor(
 
     override fun deleteFile(name: String) {
         (buffers.remove(name) ?: throw FileDoesNotExistException(Paths.get(name)))
-                .also { it.release() }
+            .also { it.release() }
     }
 
     override fun rename(source: String, dest: String) {
