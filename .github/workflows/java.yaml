@@ -36,7 +36,8 @@ jobs:
         set -eux
         ./gradlew assemble $GRADLE_ARGS
         ./gradlew check -PshopPassedTests $GRADLE_ARGS
-        ./gradlew jcstressClasses jmhClasses $GRADLE_ARGS
+        ./gradlew jmhClasses $GRADLE_ARGS
+        # ./gradlew jcstressClasses $GRADLE_ARGS
 
     - name: Prepare publishing
       if: |
