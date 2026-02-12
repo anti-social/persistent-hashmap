@@ -34,8 +34,8 @@ class StraightHashMapROEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO>
 ) : StraightHashMapBaseEnv(dir) {
 
     private data class VersionedFile(
-            val version: Long,
-            val file: RefCounted<MappedFile<IOBuffer>>
+        val version: Long,
+        val file: RefCounted<MappedFile<IOBuffer>>
     )
 
     private val lock = ReentrantLock()
@@ -81,46 +81,45 @@ class StraightHashMapROEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO>
     }
 
     fun getCurrentMap(): RO {
-        var curFile: VersionedFile
         while (true) {
-            curFile = currentFile ?: lock.lock().let {
+            // If `currentFile` is there we do not need the lock
+            var curFile = currentFile ?: lock.lock().let {
                 // Another thread could update the current file so check it again
                 currentFile ?: try {
-                    openFile(dir)
+                    openFile(dir).also { file ->
+                        currentFile = file
+                    }
                 } finally {
                     lock.unlock()
                 }
             }
-            // Try to retain the map file.
-            // It might fail if other readers closed it
-            if (curFile.file.retain() != null) {
-                break
-            }
-        }
 
-        val version = dir.readVersion()
-        if (curFile.version != version) {
-            if (lock.tryLock()) {
-                try {
-                    val newFile = openFile(dir)
-                    currentFile = newFile
-                    // Release an old map file
-                    curFile.file.release()
-                    curFile = newFile
-                    // Retain a map file
-                    // we just now created the map file and we are under a lock
-                    // so calling retain should be always successful
-                    curFile.file.retain() ?:
-                            throw IllegalStateException("Somehow the file just opened has been released")
-
-                } finally {
-                    lock.unlock()
+            val version = dir.readVersion()
+            if (curFile.version != version) {
+                // Do not wait the lock, it's ok to return an old map
+                if (lock.tryLock()) {
+                    try {
+                        val newFile = openFile(dir)
+                        currentFile = newFile
+                        // Release an old map file
+                        curFile.file.release()
+                        curFile = newFile
+                        // Retain a map file
+                        // we just now created the map file and we are under a lock
+                        // so calling retain should be always successful
+                    } finally {
+                        lock.unlock()
+                    }
                 }
             }
-        }
 
-        // File will be released when closing a hash map
-        return mapType.createReadOnly(curFile.version, curFile.file)
+            // Try to retain the map file before returning.
+            // It might fail if all the other readers have closed it
+            if (curFile.file.retain() == null) {
+                continue
+            }
+            return mapType.createReadOnly(curFile.version, curFile.file)
+        }
     }
 
     override fun close() {

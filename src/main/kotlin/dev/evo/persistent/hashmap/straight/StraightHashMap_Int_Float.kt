@@ -114,6 +114,10 @@ open class StraightHashMapROImpl_Int_Float(
     final override val maxDistance = header.maxDistance
     final override val capacity = header.capacity
 
+    override fun refCount(): Long {
+        return file.refCount()
+    }
+
     override fun close() {
         file.release()
     }

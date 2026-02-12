@@ -33,6 +33,8 @@ interface StraightHashMapRO : AutoCloseable {
     fun loadAllBookmarks(): LongArray
 
     fun maxDist(): Int
+
+    fun refCount(): Long
 }
 
 interface StraightHashMap : StraightHashMapRO {
