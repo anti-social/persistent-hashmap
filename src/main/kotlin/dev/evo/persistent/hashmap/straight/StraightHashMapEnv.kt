@@ -115,7 +115,7 @@ class StraightHashMapROEnv<H: Hasher, W: StraightHashMap, RO: StraightHashMapRO>
 
             // Try to retain the map file before returning.
             // It might fail if all the other readers have closed it
-            if (curFile.file.retain() == null) {
+            if (curFile.file.retainAndGet() == null) {
                 continue
             }
             return mapType.createReadOnly(curFile.version, curFile.file)

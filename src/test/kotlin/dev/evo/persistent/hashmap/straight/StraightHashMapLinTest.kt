@@ -13,10 +13,10 @@ const val LIN_TEST_MULTIPLIER = 3
 @Param(name = "key", gen = IntGen::class, conf = "1:3")
 //@Param(name = "value", gen = IntGen::class, conf = "1:3")
 class SimpleHashMapLinTest : FunSpec() {
-    private val map = StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
+    private val env = StraightHashMapEnv.Builder(StraightHashMapType_Int_Float)
             .initialEntries(7)
             .createAnonymousDirect()
-    private val table = map.openMap()
+    private val map = env.openMap()
 
     init {
         test("linearization test").config(enabled = false) {
@@ -26,12 +26,12 @@ class SimpleHashMapLinTest : FunSpec() {
 
     @Operation
     fun put(@Param(name = "key") key: Int, @Param(name = "key") value: Float) {
-        table.put(key, value)
+        map.put(key, value)
     }
 
     @Operation
     fun remove(@Param(name = "key") key: Int) {
-        table.remove(key)
+        map.remove(key)
     }
 
     private fun runTest() {

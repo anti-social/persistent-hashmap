@@ -39,7 +39,7 @@ public class AtomicRefCounted_ConcurrentRetainWhenReleasing {
     }
 
     private int getValue() {
-        IntBox v = rc.retain();
+        IntBox v = rc.retainAndGet();
         boolean acquired = false;
         try {
             if (v != null) {

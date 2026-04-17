@@ -7,7 +7,8 @@ class IllegalRefCountException : IllegalStateException()
 interface RefCounted<out T> {
     fun refCount(): Long
     fun get(): T
-    fun retain(): T?
+    fun retain(): RefCounted<T>
+    fun retainAndGet(): T?
     fun release(): Boolean
 }
 
@@ -30,7 +31,13 @@ class AtomicRefCounted<out T>(
         return value
     }
 
-    override fun retain(): T? {
+    override fun retain(): AtomicRefCounted<T> {
+        val oldRc = rc.getAndAdd(2)
+        ensureValid(oldRc)
+        return this
+    }
+
+    override fun retainAndGet(): T? {
         val oldRc = rc.getAndAdd(2)
         if (!isValid(oldRc)) {
             return null
@@ -67,9 +74,17 @@ class AtomicRefCounted<out T>(
 }
 
 inline fun <T, R> RefCounted<T>.use(block: (T) -> R): R {
+    try {
+        return block(get())
+    } finally {
+        release()
+    }
+}
+
+inline fun <T, R> RefCounted<T>.retainAndUse(block: (T) -> R): R {
     var acquired = false
     try {
-        val value = retain()
+        val value = retainAndGet()
         if (value != null) {
             acquired = true
             return block(value)

@@ -42,7 +42,6 @@ class VersionedRamDirectory private constructor(
                 }
             }
             return VersionedRamDirectory(bufferManagement, bufferAllocator) 
-            // return VersionedRamDirectory(ByteBuffer::allocateDirect)
         }
     }
 
@@ -54,13 +53,13 @@ class VersionedRamDirectory private constructor(
         }
         val buffer = bufferAllocator(size)
         val file = AtomicRefCounted(MappedFile(name, buffer)) {}
-        buffers[name] = file
+        buffers[name] = file.retain()
         return file
     }
 
     override fun openFileWritable(name: String): RefCounted<MappedFile<MutableIOBuffer>> {
         return buffers.computeIfPresent(name) { _, file ->
-            file.also { it.retain() }
+            file.retain()
         } ?: throw FileDoesNotExistException(Paths.get(name))
     }
 

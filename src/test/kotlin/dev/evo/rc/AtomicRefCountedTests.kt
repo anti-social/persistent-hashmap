@@ -15,10 +15,10 @@ class AtomicRefCountedTests : StringSpec() {
 
             rc.refCount() shouldBe 1
 
-            rc.retain() shouldBe 100
+            rc.retainAndGet() shouldBe 100
             rc.refCount() shouldBe 2
 
-            rc.use {
+            rc.retainAndUse {
                 it shouldBe 100
                 rc.refCount() shouldBe 3
             }
@@ -31,7 +31,10 @@ class AtomicRefCountedTests : StringSpec() {
             rc.release() shouldBe true
             v shouldBe 100
 
-            rc.retain() shouldBe null
+            rc.retainAndGet() shouldBe null
+            shouldThrow<IllegalRefCountException> {
+                rc.retain()
+            }
             shouldThrow<IllegalRefCountException> {
                 rc.release()
             }
