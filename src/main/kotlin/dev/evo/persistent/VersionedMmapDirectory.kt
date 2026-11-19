@@ -9,6 +9,7 @@ import dev.evo.rc.AtomicRefCounted
 import dev.evo.rc.RefCounted
 
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
@@ -155,13 +156,19 @@ class VersionedMmapDirectory private constructor(
 
     override fun openFileReadOnly(name: String): RefCounted<MappedFile<IOBuffer>> {
         val filepath = path.resolve(name)
-        if (!filepath.toFile().exists()) {
+        try {
+            return AtomicRefCounted(
+                mmapFile(filepath.toFile(), Mode.OpenRO, bufferManagement),
+                bufferCleaner
+            )
+        } catch (ex: FileNotFoundException) {
+            // `RandomAccessFile` also throws `FileNotFoundException` when permission is denied
+            // or the path is a directory, so only convert it if the file is really missing
+            if (filepath.toFile().exists()) {
+                throw ex
+            }
             throw FileDoesNotExistException(filepath)
         }
-        return AtomicRefCounted(
-            mmapFile(filepath.toFile(), Mode.OpenRO, bufferManagement),
-            bufferCleaner
-        )
     }
 
     override fun deleteFile(name: String) {
